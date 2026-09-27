@@ -115,11 +115,17 @@ jobs:
         if: env.SIGN == 'true'
         shell: pwsh
         run: |
+          # Signed files go straight into the installer's payload dir, and only the installer project is
+          # rebuilt (BuildProjectReferences=false): building through CMake would let MSBuild relink
+          # CadThumb.exe and overwrite the signed copy.
           foreach ($f in 'CadThumb.exe', 'CadThumbShell.dll') {
+            Copy-Item "signing/inner-signed/$f" "build/payload/$f" -Force
             Copy-Item "signing/inner-signed/$f" "build/bin/Release/$f" -Force
-            (Get-Item "build/bin/Release/$f").LastWriteTime = Get-Date # newer than the payload copy
+            (Get-Item "build/payload/$f").LastWriteTime = Get-Date # newer than the compiled resource
           }
-          cmake --build --preset release --target CadThumbSetup
+          $msbuild = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest `
+            -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
+          & $msbuild build/CadThumbSetup.vcxproj /p:Configuration=Release /p:BuildProjectReferences=false /v:m /nologo
           if ($LASTEXITCODE) { throw "installer rebuild failed" }
           foreach ($f in 'CadThumb.exe', 'CadThumbShell.dll') {
             $sig = Get-AuthenticodeSignature "build/payload/$f"

@@ -37,6 +37,11 @@ bool StopRunningHost(DWORD waitMs);
 int RunViewer(HINSTANCE instance, const std::wstring& path, const std::wstring& snapshot = {});
 void LaunchViewer(const std::wstring& path); // starts `CadThumb.exe --view` as a separate process
 
+// ---- Diagnose.cpp
+// End-to-end check of registration, Explorer, the service and a real thumbnail request; writes
+// CadThumb-diagnostics.txt to the desktop. interactive: show the report (and offer an Explorer restart).
+int Diagnose(bool interactive);
+
 // ---- Console.cpp
 void AttachParentConsole();
 void Out(const std::wstring& text);  // console if attached, otherwise buffered

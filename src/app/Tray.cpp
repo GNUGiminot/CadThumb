@@ -155,7 +155,7 @@ void ShowMenu() {
     AppendMenuW(m, MF_STRING, ID_LOG, L"Открыть журнал");
     AppendMenuW(m, MF_STRING, ID_OPEN_CACHE, L"Открыть папку кэша");
     AppendMenuW(m, MF_STRING, ID_CLEAR_CACHE, L"Очистить кэш эскизов");
-    AppendMenuW(m, MF_STRING, ID_HANDLERS, L"Проверить регистрацию в Проводнике");
+    AppendMenuW(m, MF_STRING, ID_HANDLERS, L"Диагностика (эскизы не появляются?)");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING | (IsAutostartEnabled() ? MF_CHECKED : 0), ID_AUTOSTART, L"Запускать при входе в Windows");
     AppendMenuW(m, MF_STRING, ID_EXIT, L"Выход");
@@ -187,8 +187,8 @@ void ShowMenu() {
         }
         break;
     case ID_HANDLERS:
-        MessageBoxW(g_wnd, (L"Кто сейчас строит эскизы:\n\n" + DescribeThumbnailHandlers()).c_str(), L"CadThumb",
-                    MB_OK | MB_ICONINFORMATION);
+        // separate process: the check loads the thumbnail DLL like Explorer does, keep that out of the host
+        ShellExecuteW(nullptr, nullptr, SelfExePath().c_str(), L"--diagnose", nullptr, SW_SHOWNORMAL);
         break;
     case ID_AUTOSTART: SetAutostart(!IsAutostartEnabled(), SelfExePath()); break;
     case ID_EXIT: DestroyWindow(g_wnd); break;

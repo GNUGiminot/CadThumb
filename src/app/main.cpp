@@ -1,4 +1,4 @@
-﻿#include "app/App.h"
+#include "app/App.h"
 
 #include "common/Cache.h"
 #include "common/ExplorerRestart.h"
@@ -228,6 +228,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int) {
             }
         }
         Out(L"Готово: построено " + std::to_wstring(ok) + L", ошибок " + std::to_wstring(fail) + L"\r\n");
+    } else if (cmd == L"--diagnose") {
+        rc = Diagnose(!HasFlag(argc, argv, L"--quiet"));
+        showBox = false; // Diagnose shows its own dialog
     } else if (cmd == L"--status") {
         rc = CmdStatus();
     } else if (cmd == L"--stop") {

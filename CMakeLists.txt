@@ -79,6 +79,7 @@ add_executable(CadThumb WIN32
   src/app/Prewarm.cpp
   src/app/Tray.cpp
   src/app/Console.cpp
+  src/app/Diagnose.cpp
   src/viewer/Viewer.cpp
   src/viewer/ViewModel.cpp
   res/CadThumb.rc

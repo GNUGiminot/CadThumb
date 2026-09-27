@@ -5,3 +5,16 @@ triplets/*.log
 *.user
 .vs/
 dist/
+
+# LiteSSH: electron
+node_modules/
+out/
+dist/
+release/
+.tmp/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db

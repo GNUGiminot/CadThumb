@@ -187,7 +187,9 @@ bool DoInstall(const Options& o, std::wstring& report) {
                         KEY_SET_VALUE, nullptr, &k, nullptr) == ERROR_SUCCESS) {
         SetRegStr(k, L"DisplayName", L"CadThumb — эскизы STEP/3MF/STL");
         SetRegStr(k, L"DisplayVersion", L"" CADTHUMB_VERSION);
-        SetRegStr(k, L"Publisher", L"CadThumb");
+        SetRegStr(k, L"Publisher", L"GNUGiminot");
+        SetRegStr(k, L"URLInfoAbout", L"https://github.com/GNUGiminot/CadThumb");
+        SetRegStr(k, L"HelpLink", L"https://github.com/GNUGiminot/CadThumb/issues");
         SetRegStr(k, L"DisplayIcon", exe + L",0");
         SetRegStr(k, L"InstallLocation", root);
         SetRegStr(k, L"UninstallString", L"\"" + setupCopy + L"\" /uninstall");

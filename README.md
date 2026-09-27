@@ -5,7 +5,7 @@
 
 ![Эскизы в Проводнике](docs/images/thumbnails.png)
 
-> **English.** CadThumb adds thumbnails for **STEP (.step/.stp)**, **3MF** and optionally **STL** files to Windows 10/11 File Explorer, plus a lightweight 3D viewer (rotate/pan/zoom, edges, dimensions, a ruler with vertex snapping, volume and PLA weight estimate). STEP files are tessellated with OpenCASCADE; 3MF uses the picture embedded by the slicer or renders the model. Rendering runs in a separate process with memory and time limits, so Explorer never hangs or crashes because of a heavy file. Download `CadThumb-Setup-x.y.z.exe` from [Releases](../../releases/latest), no admin rights needed. The documentation below is in Russian.
+> **English.** CadThumb adds thumbnails for **STEP (.step/.stp)**, **3MF** and optionally **STL** files to Windows 10/11 File Explorer, plus a lightweight 3D viewer (rotate/pan/zoom, edges, dimensions, a ruler with vertex snapping, volume and PLA weight estimate). STEP files are tessellated with OpenCASCADE; 3MF uses the picture embedded by the slicer or renders the model. Rendering runs in a separate process with memory and time limits, so Explorer never hangs or crashes because of a heavy file. Download `CadThumb-Setup-x.y.z.exe` from [Releases](../../releases/latest), no admin rights needed. The documentation below is in Russian. Contact: [GitHub Issues](../../issues), Telegram [@giminot](https://t.me/giminot).
 
 Проводник показывает эскизы моделей `.step`, `.stp` и `.3mf` (и, по желанию, `.stl`) прямо в папках, открывать CAD или слайсер не нужно. В комплекте есть лёгкий 3D-просмотрщик с линейкой.
 
@@ -190,6 +190,11 @@ thumbtest.exe --shell model.step out.png 256
 ```
 
 Журнал: `%LOCALAPPDATA%\CadThumb\cadthumb.log` (подробный режим — `VerboseLog=1`).
+
+## Автор и обратная связь
+
+* GitHub: [@GNUGiminot](https://github.com/GNUGiminot) — ошибки и предложения лучше оставлять в [Issues](../../issues)
+* Telegram: [@giminot](https://t.me/giminot)
 
 ## Лицензия
 

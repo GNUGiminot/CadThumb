@@ -5,3 +5,7 @@ triplets/*.log
 *.user
 .vs/
 dist/
+
+# linux/ (see linux/build/STATUS.md): local rootless verification artifacts, never committed
+linux/build-linux/
+linux/sysroot/

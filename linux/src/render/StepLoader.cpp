@@ -1,7 +1,6 @@
-// STEP (AP203/AP214/AP242) -> triangle mesh via OpenCASCADE.
+// STEP (AP203/AP214/AP242) -> triangle mesh via OpenCASCADE. Same logic as the Windows build's
+// src/render/StepLoader.cpp, adapted to std::string paths and a portable millisecond clock.
 #include "render/Loaders.h"
-
-#include "common/Paths.h"
 
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepBndLib.hxx>
@@ -29,15 +28,23 @@
 #include <XCAFDoc_ShapeTool.hxx>
 #include <XCAFPrs_DocumentExplorer.hxx>
 
-#include <windows.h>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 
 namespace ct {
 
-std::string ReadStepOriginatingSystem(const std::wstring& path) {
-    FILE* f = _wfopen(path.c_str(), L"rb");
+namespace {
+long long NowMs() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+} // namespace
+
+std::string ReadStepOriginatingSystem(const std::string& path) {
+    FILE* f = fopen(path.c_str(), "rb");
     if (!f) return {};
     std::string head(64 * 1024, '\0');
     head.resize(fread(head.data(), 1, head.size(), f));
@@ -144,12 +151,10 @@ double ComputeDeflection(const TopoDS_Shape& shape, int size, double quality, do
 
 } // namespace
 
-bool LoadStep(const std::wstring& path, int size, double quality, Mesh& mesh, StepInfo& info, std::string& error) {
+bool LoadStep(const std::string& path, int size, double quality, Mesh& mesh, StepInfo& info, std::string& error) {
     info.originatingSystem = ReadStepOriginatingSystem(path);
-    // Silence OCCT console output (the process has no console anyway).
     Message::DefaultMessenger()->RemovePrinters(STANDARD_TYPE(Message_Printer));
 
-    const std::string u8path = Utf8(path);
     const double angular = std::clamp(0.45 / std::sqrt(std::max(quality, 0.1)), 0.12, 0.8);
 
     try {
@@ -165,15 +170,15 @@ bool LoadStep(const std::wstring& path, int size, double quality, Mesh& mesh, St
         reader.SetMatMode(false);
         reader.SetViewMode(false);
 #if OCC_VERSION_HEX >= 0x070700
-        reader.SetMetaMode(false); // added in OCCT 7.7; guarded for older OCCT (e.g. Linux distro packages)
+        reader.SetMetaMode(false); // added in OCCT 7.7; older distro packages (e.g. Ubuntu's 7.6) lack it
 #endif
 
-        ULONGLONG t = GetTickCount64();
-        bool xcafOk = reader.ReadFile(u8path.c_str()) == IFSelect_RetDone;
-        info.readMs = GetTickCount64() - t;
-        t = GetTickCount64();
+        long long t = NowMs();
+        bool xcafOk = reader.ReadFile(path.c_str()) == IFSelect_RetDone;
+        info.readMs = NowMs() - t;
+        t = NowMs();
         xcafOk = xcafOk && reader.Transfer(doc);
-        info.transferMs = GetTickCount64() - t;
+        info.transferMs = NowMs() - t;
         if (xcafOk) {
             Handle(XCAFDoc_ShapeTool) shapeTool = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
             NCollection_Sequence<TDF_Label> roots;
@@ -191,10 +196,10 @@ bool LoadStep(const std::wstring& path, int size, double quality, Mesh& mesh, St
                 error = "STEP: empty geometry";
                 return false;
             }
-            t = GetTickCount64();
+            t = NowMs();
             BRepMesh_IncrementalMesh mesher(all, defl, false, angular, true);
-            info.meshMs = GetTickCount64() - t;
-            t = GetTickCount64();
+            info.meshMs = NowMs() - t;
+            t = NowMs();
 
             Collector col{mesh, mesh.defaultColor};
             for (XCAFPrs_DocumentExplorer ex(doc, XCAFPrs_DocumentExplorerFlags_OnlyLeafNodes); ex.More(); ex.Next()) {
@@ -203,11 +208,11 @@ bool LoadStep(const std::wstring& path, int size, double quality, Mesh& mesh, St
                 col.AddFaces(fi);
             }
             if (mesh.idx.empty()) CollectEdges(all, defl, mesh);
-            info.collectMs = GetTickCount64() - t;
+            info.collectMs = NowMs() - t;
         } else {
             // Fallback without XCAF (no colors), sometimes succeeds on slightly broken files.
             STEPControl_Reader plain;
-            if (plain.ReadFile(u8path.c_str()) != IFSelect_RetDone) {
+            if (plain.ReadFile(path.c_str()) != IFSelect_RetDone) {
                 error = "STEP: cannot read file";
                 return false;
             }
@@ -240,13 +245,11 @@ bool LoadStep(const std::wstring& path, int size, double quality, Mesh& mesh, St
         return false;
     }
 
-    // normalize accumulated normals
     for (size_t i = 0; i + 2 < mesh.nrm.size(); i += 3) {
         float* n = &mesh.nrm[i];
         float l = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
         if (l > 1e-20f) n[0] /= l, n[1] /= l, n[2] /= l;
     }
-    // If every face had the same color as the default, drop the per-triangle colors.
     if (!mesh.triColor.empty() &&
         std::all_of(mesh.triColor.begin(), mesh.triColor.end(), [&](uint32_t c) { return c == mesh.defaultColor; }))
         mesh.triColor.clear();

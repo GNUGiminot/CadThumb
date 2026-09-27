@@ -42,6 +42,8 @@ void ArmWatchdog(int seconds) {
 } // namespace
 
 int main(int argc, char** argv) {
+    Settings::WriteDefaultsIfMissing(); // also on --help/--version: `cadthumb settings` can rely on it existing
+
     if (argc == 2 && (strcmp(argv[1], "--version") == 0)) {
         printf("cadthumb-thumbnailer " CADTHUMB_VERSION "\n");
         return 0;
@@ -50,12 +52,12 @@ int main(int argc, char** argv) {
         fprintf(stderr,
                 "usage: cadthumb-thumbnailer <file-or-uri> <output.png> <size>\n"
                 "  Renders a thumbnail for a .step/.stp/.3mf (or .stl) file.\n"
-                "  Settings: %s (created with defaults on first run)\n",
+                "  Settings: %s (created with defaults on first run)\n"
+                "  Management: run 'cadthumb' for status/settings/install/uninstall.\n",
                 SettingsPath().c_str());
         return 3;
     }
 
-    Settings::WriteDefaultsIfMissing();
     const Settings s = Settings::Load();
     ArmWatchdog(s.renderTimeoutSec);
 

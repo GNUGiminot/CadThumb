@@ -9,7 +9,7 @@
 
 Проводник показывает эскизы моделей `.step`, `.stp` и `.3mf` (и, по желанию, `.stl`) прямо в папках, открывать CAD или слайсер не нужно. В комплекте есть лёгкий 3D-просмотрщик с линейкой.
 
-Версия для Linux (GNOME Files/Nautilus, Nemo, Caja, Thunar) в разработке: собирается, но ещё не упакована — см. [linux/README.md](linux/README.md).
+Есть версия для Linux (GNOME Files/Nautilus, Nemo, Caja, Thunar) — см. раздел [«Linux»](#linux) ниже.
 
 ## Скачать
 
@@ -192,6 +192,37 @@ thumbtest.exe --shell model.step out.png 256
 ```
 
 Журнал: `%LOCALAPPDATA%\CadThumb\cadthumb.log` (подробный режим — `VerboseLog=1`).
+
+## Linux
+
+GNOME Files/Nautilus, Nemo, Caja, PCManFM, Thunar (через Tumbler) — эскизы регистрируются по стандарту freedesktop.org «Thumbnailer Entry». Своего фонового сервиса и трея здесь нет: кэш эскизов, изоляцию процесса и таймаут уже даёт сама файловая среда. Вместо меню в трее — управление одной командой из терминала, **`cadthumb`**.
+
+```bash
+git clone https://github.com/GNUGiminot/CadThumb.git
+cd CadThumb/linux
+sudo apt install cmake g++ pkg-config libpugixml-dev libocct-data-exchange-dev   # Debian/Ubuntu
+./install.sh            # для текущего пользователя, STEP + 3MF
+./install.sh --stl      # плюс .stl
+./install.sh --system   # для всех пользователей (спросит sudo)
+```
+
+Первый запуск соберёт `cadthumb-thumbnailer` (пара минут) и зарегистрирует его. Откройте папку с `.step`/`.3mf` заново или нажмите F5, если она уже была открыта — файловые менеджеры подхватывают новый обработчик эскизов только при следующем чтении папки.
+
+Команда `cadthumb` — это и есть «трей» для Linux-версии:
+
+```
+cadthumb                    статус и подсказки (по умолчанию)
+cadthumb status             бинарник, регистрация, настройки — всё в одном месте
+cadthumb settings           путь к файлу настроек (~/.config/cadthumb/settings.ini), откроет в $EDITOR
+cadthumb install [--system] [--stl]
+cadthumb uninstall [--system] [--purge]
+cadthumb refresh [файл]      забыть закэшированные эскизы, чтобы построились заново
+cadthumb test <файл> [размер]  построить эскиз напрямую, для отладки
+```
+
+Ключи настроек в `settings.ini` совпадают с разделом `[Render]` Windows-версии (качество, вертикальная ось, углы обзора, цвета, фон, `MaxFileSizeMB`, `Prefer3mfEmbedded`…).
+
+Подробности, статус проверки и сборка вручную — в [linux/README.md](linux/README.md).
 
 ## Автор и обратная связь
 

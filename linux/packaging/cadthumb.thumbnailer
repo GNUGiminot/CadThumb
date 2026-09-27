@@ -1,0 +1,11 @@
+; freedesktop.org "Thumbnailer Entry" — read by GNOME Files/Nautilus, Nemo, Caja, PCManFM and
+; Thunar (via Tumbler). Recognized locations: ~/.local/share/thumbnailers/ (per user) or
+; /usr/share/thumbnailers/ (system-wide).
+;
+; This file is a reference copy for manual installs; `cadthumb install` (see ../bin/cadthumb)
+; generates the same file with TryExec/Exec pointing at the actual installed binary path, and adds
+; model/stl to MimeType only when installed with --stl.
+[Thumbnailer Entry]
+TryExec=cadthumb-thumbnailer
+Exec=cadthumb-thumbnailer %u %o %s
+MimeType=model/step;model/step-xml;application/step;model/3mf;application/vnd.ms-package.3dmanufacturing-3dmodel+xml;

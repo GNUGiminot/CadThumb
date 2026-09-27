@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Associates .step/.stp/.3mf/.stl with MIME types, for systems whose shared-mime-info is too old to
+  know them already (they were added upstream a few years ago; this is a harmless no-op where they're
+  already registered — shared-mime-info merges by MIME type, not by file). Installed by `cadthumb
+  install` into ~/.local/share/mime/packages/ (or /usr/share/mime/packages/ with --system), followed
+  by `update-mime-database`.
+-->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="model/step">
+    <comment>STEP 3D model</comment>
+    <glob pattern="*.step"/>
+    <glob pattern="*.stp"/>
+  </mime-type>
+  <mime-type type="application/vnd.ms-package.3dmanufacturing-3dmodel+xml">
+    <comment>3MF 3D model</comment>
+    <glob pattern="*.3mf"/>
+  </mime-type>
+  <mime-type type="model/stl">
+    <comment>STL 3D model</comment>
+    <glob pattern="*.stl"/>
+  </mime-type>
+</mime-info>

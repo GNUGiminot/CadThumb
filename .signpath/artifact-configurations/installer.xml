@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SignPath artifact configuration "installer" (paste into the SignPath project, slug: installer).
+     The GitHub artifact is a ZIP with the installer under a fixed name; the workflow renames it to
+     CadThumb-Setup-<version>.exe after signing. -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="CadThumbSetup.exe">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

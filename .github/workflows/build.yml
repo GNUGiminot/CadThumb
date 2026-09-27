@@ -1,7 +1,8 @@
 name: build
 
-# Every push / PR: build and upload the installer as an artifact.
-# Tag "vX.Y.Z": additionally publish a GitHub release with the installer and its SHA-256.
+# Every push / PR: build and upload the installer as an artifact (unsigned).
+# Tag "vX.Y.Z": additionally sign with SignPath (when configured, see SIGNING.md) and publish a
+# GitHub release with the installer and its SHA-256.
 on:
   push:
     branches: [main]
@@ -11,6 +12,7 @@ on:
 
 permissions:
   contents: write
+  actions: read # SignPath fetches the uploaded artifacts through the GitHub API
 
 env:
   # vcpkg baseline with opencascade 8.0.0 (the version CadThumb is developed against)
@@ -20,6 +22,10 @@ jobs:
   build:
     runs-on: windows-2022
     timeout-minutes: 240 # the first OpenCASCADE build takes a while; later runs use the binary cache
+    env:
+      # Signing only for release tags, and only once SignPath is set up (SIGNING.md). Without it the
+      # workflow still builds and publishes, just unsigned.
+      SIGN: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.SIGNPATH_API_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -55,15 +61,12 @@ jobs:
           if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$v") {
             throw "Tag $env:GITHUB_REF_NAME does not match the project version $v in CMakeLists.txt"
           }
-          $setup = "dist/CadThumb-Setup-$v.exe"
-          if (-not (Test-Path $setup)) { throw "$setup was not produced" }
-          (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower() + "  CadThumb-Setup-$v.exe" |
-            Out-File "dist/CadThumb-Setup-$v.exe.sha256" -Encoding ascii
+          if (-not (Test-Path "dist/CadThumb-Setup-$v.exe")) { throw "dist/CadThumb-Setup-$v.exe was not produced" }
 
       - name: Smoke test
         shell: pwsh
         run: |
-          # renders a generated cube through the same code path as Explorer thumbnails
+          # renders a generated tetrahedron through the same code path as Explorer thumbnails
           $stl = "$env:RUNNER_TEMP\cube.stl"
           @('solid c','facet normal 0 0 0','outer loop','vertex 0 0 0','vertex 10 0 0','vertex 0 10 0','endloop','endfacet',
             'facet normal 0 0 0','outer loop','vertex 0 0 0','vertex 0 10 0','vertex 0 0 10','endloop','endfacet',
@@ -73,6 +76,100 @@ jobs:
           $out = & build/bin/Release/CadThumb.exe --render $stl "$env:RUNNER_TEMP\cube.png" --size 256 | Out-String
           Write-Host $out
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$env:RUNNER_TEMP\cube.png")) { throw "render failed" }
+
+      # ---------------------------------------------------------------- signing (release tags only)
+      # 1) sign the program files that the installer embeds, 2) rebuild the installer around the signed
+      # files, 3) sign the installer itself. Signing only the outer installer would leave the extracted
+      # CadThumb.exe / CadThumbShell.dll (the ones that actually run, inside Explorer too) unsigned.
+
+      - name: Stage program files for signing
+        if: env.SIGN == 'true'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force signing/inner | Out-Null
+          Copy-Item build/bin/Release/CadThumb.exe, build/bin/Release/CadThumbShell.dll signing/inner/
+
+      - name: Upload program files (unsigned)
+        if: env.SIGN == 'true'
+        id: upload-inner
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-program-files
+          path: signing/inner/*
+
+      - name: Sign program files (SignPath)
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: program-files
+          github-artifact-id: ${{ steps.upload-inner.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600 # release signing waits for a manual approval
+          output-artifact-directory: signing/inner-signed
+
+      - name: Rebuild installer around the signed files
+        if: env.SIGN == 'true'
+        shell: pwsh
+        run: |
+          foreach ($f in 'CadThumb.exe', 'CadThumbShell.dll') {
+            Copy-Item "signing/inner-signed/$f" "build/bin/Release/$f" -Force
+            (Get-Item "build/bin/Release/$f").LastWriteTime = Get-Date # newer than the payload copy
+          }
+          cmake --build --preset release --target CadThumbSetup
+          if ($LASTEXITCODE) { throw "installer rebuild failed" }
+          foreach ($f in 'CadThumb.exe', 'CadThumbShell.dll') {
+            $sig = Get-AuthenticodeSignature "build/payload/$f"
+            if ($sig.Status -ne 'Valid') { throw "embedded $f is not signed ($($sig.Status))" }
+          }
+          New-Item -ItemType Directory -Force signing/setup | Out-Null
+          Copy-Item build/bin/Release/CadThumbSetup.exe signing/setup/CadThumbSetup.exe
+
+      - name: Upload installer (unsigned)
+        if: env.SIGN == 'true'
+        id: upload-setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-installer
+          path: signing/setup/CadThumbSetup.exe
+
+      - name: Sign installer (SignPath)
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.upload-setup.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signing/setup-signed
+
+      - name: Use the signed installer
+        if: env.SIGN == 'true'
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $sig = Get-AuthenticodeSignature signing/setup-signed/CadThumbSetup.exe
+          if ($sig.Status -ne 'Valid') { throw "installer is not signed ($($sig.Status))" }
+          Write-Host "Signed by: $($sig.SignerCertificate.Subject)"
+          Copy-Item signing/setup-signed/CadThumbSetup.exe "dist/CadThumb-Setup-$v.exe" -Force
+
+      # ---------------------------------------------------------------- publish
+
+      - name: Checksum
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $setup = "dist/CadThumb-Setup-$v.exe"
+          (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower() + "  CadThumb-Setup-$v.exe" |
+            Out-File "$setup.sha256" -Encoding ascii
+          if ($env:SIGN -ne 'true') { Write-Host "::notice::Installer is NOT code-signed (SignPath not configured or not a release tag)" }
 
       - uses: actions/upload-artifact@v4
         with:

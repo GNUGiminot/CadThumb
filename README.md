@@ -229,6 +229,16 @@ cadthumb test <файл> [размер]  построить эскиз напр�
 * GitHub: [@GNUGiminot](https://github.com/GNUGiminot) — ошибки и предложения лучше оставлять в [Issues](../../issues)
 * Telegram: [@giminot](https://t.me/giminot)
 
+## Подпись кода
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+* Авторы и ревьюеры (committers and reviewers): [@GNUGiminot](https://github.com/GNUGiminot)
+* Утверждает подпись релизов (approvers): [@GNUGiminot](https://github.com/GNUGiminot)
+* Подписываются только файлы, собранные GitHub Actions из этого репозитория по тегу `vX.Y.Z` (см. [SIGNING.md](SIGNING.md)).
+
+**Конфиденциальность.** Программа не обращается к сети: эскизы строятся локально, телеметрии и проверки обновлений нет.
+
 ## Лицензия
 
 Код CadThumb распространяется по лицензии MIT, см. [LICENSE](LICENSE).

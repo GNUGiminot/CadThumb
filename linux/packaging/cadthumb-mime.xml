@@ -3,7 +3,7 @@
   Associates .step/.stp/.3mf/.stl with MIME types, for systems whose shared-mime-info is too old to
   know them already (they were added upstream a few years ago; this is a harmless no-op where they're
   already registered — shared-mime-info merges by MIME type, not by file). Installed by `cadthumb
-  install` into ~/.local/share/mime/packages/ (or /usr/share/mime/packages/ with --system), followed
+  install` into ~/.local/share/mime/packages/ (or /usr/share/mime/packages/ for a system-wide install), followed
   by `update-mime-database`.
 -->
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">

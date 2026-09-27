@@ -1,0 +1,7 @@
+build/
+out/
+testdata/
+triplets/*.log
+*.user
+.vs/
+dist/

@@ -9,6 +9,7 @@
 #include <fstream>
 #include <sstream>
 #include <unordered_map>
+#include <cmath>
 
 namespace ct {
 
@@ -19,8 +20,10 @@ std::unordered_map<std::string, std::string> ReadIni(const std::string& path) {
     std::ifstream f(path);
     std::string line;
     while (std::getline(f, line)) {
-        size_t c = line.find_first_of(";#");
+        size_t c = line.find(';');
         if (c != std::string::npos) line.resize(c);
+        size_t first = line.find_first_not_of(" \t\r");
+        if (first == std::string::npos || line[first] == '#') continue;
         size_t eq = line.find('=');
         if (eq == std::string::npos) continue;
         std::string key = line.substr(0, eq), val = line.substr(eq + 1);
@@ -51,7 +54,9 @@ bool GetBool(const std::unordered_map<std::string, std::string>& kv, const char*
 double GetDouble(const std::unordered_map<std::string, std::string>& kv, const char* key, double def) {
     auto it = kv.find(key);
     if (it == kv.end() || it->second.empty()) return def;
-    return atof(it->second.c_str());
+    char* end = nullptr;
+    double value = strtod(it->second.c_str(), &end);
+    return end != it->second.c_str() && *end == 0 && std::isfinite(value) ? value : def;
 }
 
 uint32_t GetColor(const std::unordered_map<std::string, std::string>& kv, const char* key, uint32_t def,

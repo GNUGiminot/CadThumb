@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(CadThumb VERSION 1.0.0 LANGUAGES CXX RC)
+project(CadThumb VERSION 1.0.3 LANGUAGES CXX RC)
 
 option(CADTHUMB_WITH_STEP "Build STEP support (requires OpenCASCADE)" ON)
 
@@ -40,7 +40,7 @@ add_library(cadthumb_common STATIC
   src/common/ExplorerRestart.cpp
 )
 target_include_directories(cadthumb_common PUBLIC src)
-target_link_libraries(cadthumb_common PUBLIC miniz::miniz windowscodecs shlwapi ole32 advapi32 shell32 uuid)
+target_link_libraries(cadthumb_common PUBLIC miniz::miniz ${PUGIXML_TARGET} windowscodecs shlwapi ole32 advapi32 shell32 uuid)
 
 # ---------------------------------------------------------------- render
 add_library(cadthumb_render STATIC
@@ -90,6 +90,25 @@ set_target_properties(CadThumb PROPERTIES LINK_FLAGS "/MANIFESTUAC:NO")
 # ---------------------------------------------------------------- test tool
 add_executable(thumbtest src/tools/thumbtest.cpp)
 target_link_libraries(thumbtest PRIVATE cadthumb_common)
+
+include(CTest)
+if(BUILD_TESTING)
+  add_executable(cadthumb_model_tests tests/model_tests.cpp src/viewer/ViewModel.cpp)
+  target_link_libraries(cadthumb_model_tests PRIVATE cadthumb_render)
+  target_compile_definitions(cadthumb_model_tests PRIVATE
+    CADTHUMB_TEST_DIR=L"${CMAKE_CURRENT_BINARY_DIR}/model-tests")
+  add_test(NAME model-formats COMMAND cadthumb_model_tests)
+  add_executable(cadthumb_pipe_tests tests/pipe_tests.cpp src/app/PipeServer.cpp src/app/JobManager.cpp)
+  target_include_directories(cadthumb_pipe_tests PRIVATE src)
+  target_link_libraries(cadthumb_pipe_tests PRIVATE ole32 advapi32)
+  target_compile_definitions(cadthumb_pipe_tests PRIVATE
+    CADTHUMB_TEST_DIR=L"${CMAKE_CURRENT_BINARY_DIR}/model-tests")
+  add_test(NAME pipe-protocol COMMAND cadthumb_pipe_tests)
+  add_executable(cadthumb_installer_tests tests/installer_tests.cpp)
+  target_link_libraries(cadthumb_installer_tests PRIVATE cadthumb_common comctl32)
+  target_compile_definitions(cadthumb_installer_tests PRIVATE CADTHUMB_VERSION=L"${PROJECT_VERSION}")
+  add_test(NAME installer-state COMMAND cadthumb_installer_tests)
+endif()
 
 # ---------------------------------------------------------------- single-file installer
 # The freshly built CadThumb.exe + CadThumbShell.dll are copied to a fixed place and embedded as RCDATA.

@@ -9,6 +9,9 @@
 #include <map>
 #include <memory>
 #include <unordered_map>
+#include <cmath>
+#include <stdexcept>
+#include <set>
 
 namespace ct {
 
@@ -53,10 +56,12 @@ Mat ParseMat(const char* s) {
     float v[12];
     for (int i = 0; i < 12; ++i) {
         s = SkipWs(s, e);
+        if (s < e && *s == '+') ++s;
         auto res = std::from_chars(s, e, v[i]);
-        if (res.ec != std::errc()) return Mat{};
+        if (res.ec != std::errc() || !std::isfinite(v[i])) throw std::runtime_error("3MF: invalid transform");
         s = res.ptr;
     }
+    if (SkipWs(s, e) != e) throw std::runtime_error("3MF: invalid transform");
     memcpy(r.m, v, sizeof(v));
     return r;
 }
@@ -65,7 +70,10 @@ inline float ParseFloat(const char* s) {
     float v = 0;
     const char* e = s + strlen(s);
     s = SkipWs(s, e);
-    std::from_chars(s, e, v);
+    if (s < e && *s == '+') ++s;
+    auto result = std::from_chars(s, e, v);
+    if (result.ec != std::errc() || SkipWs(result.ptr, e) != e || !std::isfinite(v))
+        throw std::runtime_error("3MF: invalid coordinate");
     return v;
 }
 
@@ -85,7 +93,14 @@ const char* Attr(const pugi::xml_node& n, const char* local) {
 int AttrInt(const pugi::xml_node& n, const char* local, int def) {
     const char* v = Attr(n, local);
     if (!v || !*v) return def;
-    return atoi(v);
+    int value = 0;
+    const char* end = v + strlen(v);
+    v = SkipWs(v, end);
+    if (v < end && *v == '+') ++v;
+    auto result = std::from_chars(v, end, value);
+    if (result.ec != std::errc() || SkipWs(result.ptr, end) != end || value < 0)
+        throw std::runtime_error("3MF: invalid integer attribute");
+    return value;
 }
 
 bool ParseColor(const char* s, uint32_t& rgb) {
@@ -106,6 +121,7 @@ struct ObjectMesh {
 constexpr uint32_t kNoColor = 0xFF000000u;
 
 struct Part {
+    float unit = 1.0f;
     std::vector<char> buf;
     pugi::xml_document doc;
     pugi::xml_node build;
@@ -113,6 +129,12 @@ struct Part {
     std::unordered_map<int, std::vector<uint32_t>> props;
     std::unordered_map<int, std::unique_ptr<ObjectMesh>> meshes;
 };
+
+Mat UnitScale(const Part* from, const Part* to) {
+    Mat scale;
+    scale.m[0] = scale.m[4] = scale.m[8] = to->unit / from->unit;
+    return scale;
+}
 
 class Loader {
 public:
@@ -124,7 +146,6 @@ public:
         if (it != parts_.end()) return it->second.get();
         auto part = std::make_unique<Part>();
         Part* raw = part.get();
-        parts_[key] = std::move(part); // cache even on failure
         int idx = zip_.Find(key);
         if (idx < 0 || !zip_.Extract(idx, raw->buf, 4ull << 30)) return nullptr;
         auto res = raw->doc.load_buffer_inplace(raw->buf.data(), raw->buf.size(), pugi::parse_minimal);
@@ -133,6 +154,16 @@ public:
         for (auto n : raw->doc.children())
             if (n.type() == pugi::node_element && Is(n, "model")) model = n;
         if (!model) return nullptr;
+        const char* unit = Attr(model, "unit");
+        if (unit && *unit) {
+            if (!strcmp(unit, "micron")) raw->unit = 0.001f;
+            else if (!strcmp(unit, "millimeter")) raw->unit = 1;
+            else if (!strcmp(unit, "centimeter")) raw->unit = 10;
+            else if (!strcmp(unit, "inch")) raw->unit = 25.4f;
+            else if (!strcmp(unit, "foot")) raw->unit = 304.8f;
+            else if (!strcmp(unit, "meter")) raw->unit = 1000;
+            else throw std::runtime_error("3MF: unsupported unit");
+        }
         for (auto sec : model.children()) {
             if (Is(sec, "resources")) {
                 for (auto r : sec.children()) {
@@ -160,6 +191,7 @@ public:
                 raw->build = sec;
             }
         }
+        parts_[key] = std::move(part);
         return raw;
     }
 
@@ -184,6 +216,9 @@ public:
             for (auto sec : mesh.children()) {
                 if (Is(sec, "vertices")) {
                     for (auto v : sec.children()) {
+                        if (!Is(v, "vertex")) continue;
+                        if (!Attr(v, "x") || !Attr(v, "y") || !Attr(v, "z"))
+                            throw std::runtime_error("3MF: missing coordinate");
                         float x = 0, y = 0, z = 0;
                         for (auto a = v.first_attribute(); a; a = a.next_attribute()) {
                             const char* n = a.name();
@@ -198,15 +233,15 @@ public:
                     }
                 } else if (Is(sec, "triangles")) {
                     for (auto t : sec.children()) {
-                        uint32_t v1 = 0, v2 = 0, v3 = 0;
+                        if (!Is(t, "triangle")) continue;
+                        uint32_t v1 = uint32_t(AttrInt(t, "v1", -1));
+                        uint32_t v2 = uint32_t(AttrInt(t, "v2", -1));
+                        uint32_t v3 = uint32_t(AttrInt(t, "v3", -1));
                         int pid = objPid, p1 = -1;
                         for (auto a = t.first_attribute(); a; a = a.next_attribute()) {
                             const char* n = a.name();
-                            if (strcmp(n, "v1") == 0) v1 = (uint32_t)atoi(a.value());
-                            else if (strcmp(n, "v2") == 0) v2 = (uint32_t)atoi(a.value());
-                            else if (strcmp(n, "v3") == 0) v3 = (uint32_t)atoi(a.value());
-                            else if (strcmp(n, "pid") == 0) pid = atoi(a.value());
-                            else if (strcmp(n, "p1") == 0) p1 = atoi(a.value());
+                            if (strcmp(n, "pid") == 0) pid = AttrInt(t, "pid", objPid);
+                            else if (strcmp(n, "p1") == 0) p1 = AttrInt(t, "p1", -1);
                         }
                         om->idx.push_back(v1);
                         om->idx.push_back(v2);
@@ -224,25 +259,40 @@ public:
     }
 
     void Instantiate(Part* part, int id, const Mat& xf, int depth) {
-        if (!part || depth > 16 || out_.TriangleCount() > kMaxTriangles) return;
+        if (!part) throw std::runtime_error("3MF: missing or invalid model part");
+        if (depth > 256 || !visiting_.insert({part, id}).second)
+            throw std::runtime_error("3MF: cyclic or excessively deep components");
         auto it = part->objects.find(id);
-        if (it == part->objects.end()) return;
+        if (it == part->objects.end()) throw std::runtime_error("3MF: missing object");
         const pugi::xml_node obj = it->second;
         const char* type = Attr(obj, "type");
-        if (type && (strcmp(type, "support") == 0 || strcmp(type, "other") == 0)) return;
+        if (type && (strcmp(type, "support") == 0 || strcmp(type, "other") == 0)) {
+            visiting_.erase({part, id});
+            return;
+        }
 
         ObjectMesh* om = GetMesh(part, id, obj);
         if (om && !om->idx.empty()) {
+            if (om->idx.size() / 3 > kMaxTriangles - out_.TriangleCount() ||
+                om->pos.size() / 3 > UINT32_MAX - out_.VertexCount())
+                throw std::runtime_error("3MF: mesh limit exceeded");
             const uint32_t base = (uint32_t)out_.VertexCount();
             const uint32_t nv = uint32_t(om->pos.size() / 3);
             for (size_t i = 0; i < om->pos.size(); i += 3) {
                 float x, y, z;
                 xf.Apply(om->pos[i], om->pos[i + 1], om->pos[i + 2], x, y, z);
+                if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z))
+                    throw std::runtime_error("3MF: non-finite transformed coordinate");
                 out_.AddVertex(x, y, z);
             }
             for (size_t t = 0; t < om->idx.size(); t += 3) {
                 uint32_t a = om->idx[t], b = om->idx[t + 1], c = om->idx[t + 2];
-                if (a >= nv || b >= nv || c >= nv) continue;
+                if (a >= nv || b >= nv || c >= nv) throw std::runtime_error("3MF: invalid vertex index");
+                const float* m = xf.m;
+                const double determinant = double(m[0]) * (double(m[4])*m[8] - double(m[5])*m[7]) -
+                    double(m[1]) * (double(m[3])*m[8] - double(m[5])*m[6]) +
+                    double(m[2]) * (double(m[3])*m[7] - double(m[4])*m[6]);
+                if (determinant < 0) std::swap(b, c);
                 out_.AddTriangle(base + a, base + b, base + c);
                 uint32_t col = om->color[t / 3];
                 out_.triColor.push_back(col);
@@ -257,9 +307,11 @@ public:
                 Mat cxf = ParseMat(Attr(comp, "transform"));
                 const char* path = Attr(comp, "path");
                 Part* target = (path && *path) ? GetPart(path) : part;
-                Instantiate(target, oid, Then(cxf, xf), depth + 1);
+                if (!target) throw std::runtime_error("3MF: missing component model part");
+                Instantiate(target, oid, Then(UnitScale(part, target), Then(cxf, xf)), depth + 1);
             }
         }
+        visiting_.erase({part, id});
     }
 
     bool Load(std::string& error) {
@@ -273,20 +325,19 @@ public:
             error = "3MF: cannot parse " + rootPath;
             return false;
         }
-        bool anyItem = false;
+        Mat units;
+        units.m[0] = units.m[4] = units.m[8] = root->unit;
         if (root->build) {
             for (auto item : root->build.children()) {
                 if (!Is(item, "item")) continue;
                 const char* printable = Attr(item, "printable");
-                if (printable && strcmp(printable, "0") == 0) continue;
-                anyItem = true;
+                if (printable && (strcmp(printable, "0") == 0 || strcmp(printable, "false") == 0)) continue;
                 const char* path = Attr(item, "path");
                 Part* target = (path && *path) ? GetPart(path) : root;
-                Instantiate(target, AttrInt(item, "objectid", -1), ParseMat(Attr(item, "transform")), 0);
+                if (!target) throw std::runtime_error("3MF: missing build model part");
+                Instantiate(target, AttrInt(item, "objectid", -1),
+                            Then(UnitScale(root, target), Then(ParseMat(Attr(item, "transform")), units)), 0);
             }
-        }
-        if (!anyItem) {
-            for (auto& [id, node] : root->objects) Instantiate(root, id, Mat{}, 0);
         }
         if (out_.idx.empty()) {
             error = "3MF: no triangles";
@@ -306,6 +357,7 @@ private:
     ZipArchive& zip_;
     Mesh& out_;
     std::map<std::string, std::unique_ptr<Part>> parts_;
+    std::set<std::pair<Part*, int>> visiting_;
     bool hasColor_ = false;
 };
 
@@ -322,6 +374,9 @@ bool Load3mf(const std::string& path, Mesh& mesh, std::string& error) {
         return loader.Load(error);
     } catch (const std::bad_alloc&) {
         error = "3MF: out of memory";
+        return false;
+    } catch (const std::exception& e) {
+        error = e.what();
         return false;
     }
 }

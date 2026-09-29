@@ -3,6 +3,7 @@
 
 #include <windows.h>
 #include <condition_variable>
+#include <atomic>
 #include <deque>
 #include <map>
 #include <memory>
@@ -25,7 +26,7 @@ public:
         std::wstring name;
         std::wstring input;
         bool ownsInput = false; // temp copy received over the pipe -> delete after rendering
-        State state = Receiving;
+        std::atomic<State> state{Receiving};
         std::wstring error;
     };
     using JobPtr = std::shared_ptr<Job>;

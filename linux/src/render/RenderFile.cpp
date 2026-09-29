@@ -7,6 +7,8 @@
 
 #include <chrono>
 #include <cstdio>
+#include <algorithm>
+#include <sys/stat.h>
 
 namespace ct {
 
@@ -29,6 +31,7 @@ char AutoUpAxis(const std::string& originatingSystem) {
 
 bool RenderFileToImage(const std::string& path, FileType type, int size, const Settings& s, Image& out,
                        std::string& error, std::string* details) {
+    size = std::clamp(size, 16, 2048);
     const long long t0 = NowMs();
     if (type == FileType::ThreeMf && s.prefer3mfEmbedded) {
         ZipArchive zip;
@@ -39,6 +42,12 @@ bool RenderFileToImage(const std::string& path, FileType type, int size, const S
             if (details) *details = "embedded thumbnail";
             return true;
         }
+    }
+    struct stat fileInfo{};
+    if (stat(path.c_str(), &fileInfo) == 0 && fileInfo.st_size >
+        int64_t(s.maxFileSizeMB) * 1024 * 1024) {
+        error = "file exceeds MaxFileSizeMB";
+        return false;
     }
 
     Mesh mesh;

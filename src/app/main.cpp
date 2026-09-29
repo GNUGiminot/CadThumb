@@ -138,9 +138,9 @@ static int CmdRegister(int argc, wchar_t** argv) {
     Out(std::wstring(ok ? L"Регистрация выполнена" : L"Ошибка регистрации") +
         (opt.machine ? L" (все пользователи):\r\n" : L" (текущий пользователь):\r\n") + report);
     Settings::WriteDefaultsIfMissing();
-    if (ok && opt.autostart) {
+    if (ok) {
         StopRunningHost(5000); // restart to pick up a new version
-        LaunchHostDetached();
+        if (opt.autostart && !HasFlag(argc, argv, L"--no-start-host")) LaunchHostDetached();
     }
     Out(L"\r\nТекущие обработчики эскизов:\r\n" + DescribeThumbnailHandlers());
     return ok ? 0 : 1;
@@ -196,6 +196,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int) {
     }
     if (cmd == L"--register") {
         rc = CmdRegister(argc, argv);
+    } else if (cmd == L"--start-host") {
+        LaunchHostDetached();
+        showBox = false;
     } else if (cmd == L"--unregister") {
         StopRunningHost(5000);
         std::wstring report;
@@ -216,7 +219,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int) {
             FileType type = FileTypeFromExtension(ExtOf(f));
             if (!FileTypeEnabled(type, s)) continue;
             std::string key;
-            if (!CacheKeyFromFile(f, type, 256, s.renderSignature, key)) continue;
+            uint64_t size = 0;
+            if (!CacheKeyFromFile(f, type, 256, s.renderSignature, key, &size) ||
+                size > uint64_t(s.maxFileSizeMB) * 1024 * 1024) {
+                ++fail;
+                continue;
+            }
             if (QueryCache(key, s.failRetryHours) != CacheState::Missing) continue;
             std::wstring err;
             if (RenderToCache(f, type, 256, key, s, &err)) {
@@ -228,6 +236,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int) {
             }
         }
         Out(L"Готово: построено " + std::to_wstring(ok) + L", ошибок " + std::to_wstring(fail) + L"\r\n");
+        rc = fail ? 2 : 0;
     } else if (cmd == L"--diagnose") {
         rc = Diagnose(!HasFlag(argc, argv, L"--quiet"));
         showBox = false; // Diagnose shows its own dialog

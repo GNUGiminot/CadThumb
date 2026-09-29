@@ -1,10 +1,10 @@
 # Code signing (SignPath)
 
-Release builds are signed through [SignPath.io](https://signpath.io) with a certificate issued to the
-[SignPath Foundation](https://signpath.org), which signs open-source projects free of charge. The
-GitHub Actions workflow (`.github/workflows/build.yml`) already contains the signing steps; they run
-only for `vX.Y.Z` tags and only once the configuration below exists — until then releases are
-published unsigned, exactly as before.
+Release builds use [SignPath.io](https://signpath.io) with a certificate issued to the
+[SignPath Foundation](https://signpath.org), which signs eligible open-source projects free of charge.
+The GitHub Actions workflow (`.github/workflows/build.yml`) signs `vX.Y.Z` releases. It now **fails
+instead of publishing an unsigned release** if the SignPath credentials below are missing. Ordinary
+CI artifacts and local `build.ps1` output remain unsigned.
 
 What gets signed, in order:
 
@@ -44,6 +44,10 @@ What gets signed, in order:
 
 4. Release as usual: bump `project(CadThumb VERSION ...)`, push a matching `vX.Y.Z` tag, approve the
    two signing requests in SignPath. The release then carries the signed installer.
+
+A valid signature identifies the publisher and protects against modification. It does not guarantee
+that SmartScreen will suppress its reputation warning on the first downloads of a new app. See
+[Microsoft's SmartScreen reputation guidance](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation).
 
 ## Checking a signature
 

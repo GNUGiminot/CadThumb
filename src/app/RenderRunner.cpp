@@ -55,7 +55,9 @@ int RenderCommand(const std::wstring& input, const std::wstring& output, FileTyp
 bool RenderToCache(const std::wstring& input, FileType type, int bucket, const std::string& key, const Settings& s,
                    std::wstring* errorOut, const std::wstring& displayName) {
     const std::wstring name = displayName.empty() ? FileNameOf(input) : displayName;
-    const std::wstring outPng = TempDir() + L"\\" + Wide(key) + L".out.png";
+    const std::wstring outPng = TempDir() + L"\\" + Wide(key) + L"-" +
+        std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(GetCurrentThreadId()) + L"-" +
+        std::to_wstring(GetTickCount64()) + L".out.png";
     const std::wstring errFile = outPng + L".err";
     DeleteFileW(outPng.c_str());
     DeleteFileW(errFile.c_str());
@@ -69,7 +71,11 @@ bool RenderToCache(const std::wstring& input, FileType type, int bucket, const s
     lim.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_PROCESS_MEMORY | JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE |
                                            JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION;
     lim.ProcessMemoryLimit = SIZE_T(s.memoryLimitMB) * 1024 * 1024;
-    if (job) SetInformationJobObject(job, JobObjectExtendedLimitInformation, &lim, sizeof(lim));
+    if (!job || !SetInformationJobObject(job, JobObjectExtendedLimitInformation, &lim, sizeof(lim))) {
+        if (job) CloseHandle(job);
+        if (errorOut) *errorOut = L"cannot configure render process limits";
+        return false;
+    }
 
     STARTUPINFOW si{sizeof(si)};
     PROCESS_INFORMATION pi{};
@@ -82,8 +88,15 @@ bool RenderToCache(const std::wstring& input, FileType type, int bucket, const s
                         &pi)) {
         error = L"cannot start render process (" + std::to_wstring(GetLastError()) + L")";
     } else {
-        if (job) AssignProcessToJobObject(job, pi.hProcess);
-        ResumeThread(pi.hThread);
+        if (!AssignProcessToJobObject(job, pi.hProcess) || ResumeThread(pi.hThread) == DWORD(-1)) {
+            TerminateProcess(pi.hProcess, 1);
+            WaitForSingleObject(pi.hProcess, 5000);
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+            CloseHandle(job);
+            if (errorOut) *errorOut = L"cannot start isolated render process";
+            return false;
+        }
         DWORD w = WaitForSingleObject(pi.hProcess, DWORD(s.renderTimeoutSec) * 1000);
         DWORD code = 1;
         if (w == WAIT_TIMEOUT) {

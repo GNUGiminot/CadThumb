@@ -255,7 +255,7 @@ int RunHost(HINSTANCE instance) {
     Settings::WriteDefaultsIfMissing();
     {
         Settings s = Settings::Get();
-        CleanupTempDir(0);
+        CleanupTempDir(24); // A separate --refresh/--prewarm process may still be rendering.
         PruneCache(s.cacheMaxMB, s.failRetryHours);
     }
 

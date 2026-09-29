@@ -7,6 +7,7 @@
 
 #include <windows.h>
 #include <cstdio>
+#include <algorithm>
 
 namespace ct {
 
@@ -55,6 +56,7 @@ bool LoadModelMesh(const std::wstring& path, FileType type, int detailSize, cons
 
 bool RenderFileToImage(const std::wstring& path, FileType type, int size, const Settings& s, Image& out,
                        std::string& error, std::string* details) {
+    size = std::clamp(size, 16, 2048);
     const ULONGLONG t0 = GetTickCount64();
     if (type == FileType::ThreeMf && s.prefer3mfEmbedded) {
         ZipArchive zip;
@@ -65,6 +67,13 @@ bool RenderFileToImage(const std::wstring& path, FileType type, int size, const 
             if (details) *details = "embedded thumbnail";
             return true;
         }
+    }
+    WIN32_FILE_ATTRIBUTE_DATA info{};
+    if (GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &info) &&
+        ((uint64_t(info.nFileSizeHigh) << 32) | info.nFileSizeLow) >
+            uint64_t(s.maxFileSizeMB) * 1024 * 1024) {
+        error = "file exceeds MaxFileSizeMB";
+        return false;
     }
 
     Mesh mesh;

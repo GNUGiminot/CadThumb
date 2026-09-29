@@ -56,6 +56,7 @@ bool CacheKeyFromStream(IStream* stream, uint64_t size, uint64_t mtime, FileType
             if (FAILED(hr) || got == 0) break;
             total += got;
         }
+        if (total != len) ok = false;
         return total;
     };
     key = ComputeCacheKey(read, size, mtime, type, bucket, renderSignature);
@@ -68,21 +69,28 @@ bool CacheKeyFromFile(const std::wstring& path, FileType type, int bucket, uint6
                            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (f == INVALID_HANDLE_VALUE) return false;
     BY_HANDLE_FILE_INFORMATION info{};
-    GetFileInformationByHandle(f, &info);
+    if (!GetFileInformationByHandle(f, &info)) {
+        CloseHandle(f);
+        return false;
+    }
     uint64_t size = (uint64_t(info.nFileSizeHigh) << 32) | info.nFileSizeLow;
     uint64_t mtime = (uint64_t(info.ftLastWriteTime.dwHighDateTime) << 32) | info.ftLastWriteTime.dwLowDateTime;
+    bool ok = true;
     auto read = [&](uint64_t off, void* dst, size_t len) -> size_t {
-        OVERLAPPED ov{};
-        ov.Offset = (DWORD)off;
-        ov.OffsetHigh = (DWORD)(off >> 32);
+        LARGE_INTEGER position{};
+        position.QuadPart = off;
+        if (!SetFilePointerEx(f, position, nullptr, FILE_BEGIN)) {
+            ok = false;
+            return 0;
+        }
         DWORD got = 0;
-        if (!ReadFile(f, dst, (DWORD)len, &got, &ov)) return 0;
+        if (!ReadFile(f, dst, (DWORD)len, &got, nullptr) || got != len) ok = false;
         return got;
     };
     key = ComputeCacheKey(read, size, mtime, type, bucket, renderSignature);
     CloseHandle(f);
     if (sizeOut) *sizeOut = size;
-    return true;
+    return ok;
 }
 
 std::wstring CachePngPath(const std::string& key) { return CacheDir() + L"\\" + Wide(key) + L".png"; }

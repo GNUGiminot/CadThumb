@@ -62,14 +62,30 @@ void DeleteValue(HKEY root, const std::wstring& sub, const wchar_t* name) {
 }
 
 // Deletes Classes\<path>\ShellEx\{thumb} only when it points to our CLSID.
-void DeleteOurHandler(HKEY root, const std::wstring& classesPath) {
+bool DeleteOurHandler(HKEY root, const std::wstring& classesPath) {
     std::wstring key = L"Software\\Classes\\" + classesPath + L"\\ShellEx\\" + kThumbnailHandlerKey;
     std::wstring v;
-    if (GetStr(root, key, nullptr, v) && _wcsicmp(v.c_str(), kClsidString) == 0) RegDeleteTreeW(root, key.c_str());
+    if (GetStr(root, key, nullptr, v) && _wcsicmp(v.c_str(), kClsidString) == 0) {
+        LSTATUS result = RegDeleteTreeW(root, key.c_str());
+        return result == ERROR_SUCCESS || result == ERROR_FILE_NOT_FOUND;
+    }
+    return true;
 }
 
 std::wstring HandlerKey(const std::wstring& classesPath) {
     return L"Software\\Classes\\" + classesPath + L"\\ShellEx\\" + kThumbnailHandlerKey;
+}
+
+bool RestoreHandler(HKEY root, const std::wstring& path) {
+    std::wstring current, backup;
+    if (GetStr(root, HandlerKey(path), nullptr, current) && _wcsicmp(current.c_str(), kClsidString) == 0) {
+        bool changed = GetStr(root, kStateKey, (L"Backup." + path).c_str(), backup)
+            ? SetStr(root, HandlerKey(path), nullptr, backup)
+            : DeleteOurHandler(root, path);
+        if (!changed) return false;
+    }
+    DeleteValue(root, kStateKey, (L"Backup." + path).c_str());
+    return true;
 }
 
 std::vector<std::wstring> ProgIdsFor(const std::wstring& ext) {
@@ -90,7 +106,7 @@ std::vector<std::wstring> ProgIdsFor(const std::wstring& ext) {
 } // namespace
 
 std::vector<std::wstring> HandledExtensions(bool includeStl) {
-    std::vector<std::wstring> e = {L".step", L".stp", L".3mf"};
+    std::vector<std::wstring> e = {L".step", L".stp", L".p21", L".3mf"};
     if (includeStl) e.push_back(L".stl");
     return e;
 }
@@ -127,10 +143,36 @@ bool RegisterShellExtension(const RegisterOptions& opt, std::wstring& report) {
 
     std::vector<std::wstring> exts = HandledExtensions(opt.includeStl);
     std::vector<std::wstring> overridden = GetMulti(root, kStateKey, L"OverriddenProgIds");
+    std::vector<std::wstring> desired;
+    for (const auto& ext : exts) {
+        desired.push_back(ext);
+        desired.push_back(L"SystemFileAssociations\\" + ext);
+        for (const auto& id : ProgIdsFor(ext)) desired.push_back(id);
+    }
+    for (auto it = overridden.begin(); it != overridden.end();) {
+        bool keep = false;
+        for (const auto& path : desired) keep |= _wcsicmp(path.c_str(), it->c_str()) == 0;
+        if (keep) { ++it; continue; }
+        if (!RestoreHandler(root, *it)) {
+            ok = false;
+            ++it;
+        } else {
+            it = overridden.erase(it);
+        }
+    }
+    auto installHandler = [&](const std::wstring& path) {
+        std::wstring own;
+        if (GetStr(root, HandlerKey(path), nullptr, own) && _wcsicmp(own.c_str(), kClsidString) != 0)
+            ok &= SetStr(root, kStateKey, (L"Backup." + path).c_str(), own);
+        ok &= SetStr(root, HandlerKey(path), nullptr, kClsidString);
+        bool known = false;
+        for (const auto& saved : overridden) known |= _wcsicmp(saved.c_str(), path.c_str()) == 0;
+        if (!known) overridden.push_back(path);
+    };
 
     for (const auto& ext : exts) {
-        SetStr(root, HandlerKey(ext), nullptr, kClsidString);
-        SetStr(root, HandlerKey(L"SystemFileAssociations\\" + ext), nullptr, kClsidString);
+        installHandler(ext);
+        installHandler(L"SystemFileAssociations\\" + ext);
         report += L"  " + ext + L": зарегистрирован\r\n";
 
         // Some ProgIDs carry their own thumbnail handler that would win over the extension key.
@@ -138,13 +180,7 @@ bool RegisterShellExtension(const RegisterOptions& opt, std::wstring& report) {
             std::wstring cur;
             std::wstring hk = std::wstring(progId) + L"\\ShellEx\\" + kThumbnailHandlerKey;
             if (!GetStr(HKEY_CLASSES_ROOT, hk, nullptr, cur) || _wcsicmp(cur.c_str(), kClsidString) == 0) continue;
-            std::wstring own;
-            if (GetStr(root, HandlerKey(progId), nullptr, own))
-                SetStr(root, kStateKey, (L"Backup." + progId).c_str(), own);
-            SetStr(root, HandlerKey(progId), nullptr, kClsidString);
-            bool known = false;
-            for (auto& o : overridden) known |= _wcsicmp(o.c_str(), progId.c_str()) == 0;
-            if (!known) overridden.push_back(progId);
+            installHandler(progId);
             report += L"    перекрыт обработчик ProgID " + progId + L" (" + cur + L")\r\n";
         }
 
@@ -159,6 +195,10 @@ bool RegisterShellExtension(const RegisterOptions& opt, std::wstring& report) {
             SetStr(root, view, nullptr, L"Просмотр 3D (CadThumb)");
             SetStr(root, view, L"Icon", L"\"" + opt.exePath + L"\",0");
             SetStr(root, view + L"\\command", nullptr, L"\"" + opt.exePath + L"\" --view \"%1\"");
+        } else {
+            const auto shell = L"Software\\Classes\\SystemFileAssociations\\" + ext + L"\\shell\\";
+            RegDeleteTreeW(root, (shell + kVerbName).c_str());
+            RegDeleteTreeW(root, (shell + kViewVerbName).c_str());
         }
         // "Open with" list; the default program (CAD, slicer) stays untouched.
         HKEY k;
@@ -189,27 +229,30 @@ bool RegisterShellExtension(const RegisterOptions& opt, std::wstring& report) {
         RegDeleteTreeW(root, (L"Software\\Classes\\SystemFileAssociations\\" + old + L"\\shell\\" + kVerbName).c_str());
         RegDeleteTreeW(root, (L"Software\\Classes\\SystemFileAssociations\\" + old + L"\\shell\\" + kViewVerbName).c_str());
         DeleteValue(root, L"Software\\Classes\\" + old + L"\\OpenWithProgids", kViewerProgId);
+        DeleteValue(root, std::wstring(L"Software\\Classes\\Applications\\") + kExeName + L"\\SupportedTypes", old.c_str());
         report += L"  " + old + L": регистрация снята\r\n";
     }
 
-    SetMulti(root, kStateKey, L"Extensions", exts);
-    SetMulti(root, kStateKey, L"OverriddenProgIds", overridden);
+    ok &= SetMulti(root, kStateKey, L"Extensions", exts);
+    ok &= SetMulti(root, kStateKey, L"OverriddenProgIds", overridden);
     SetStr(root, kStateKey, L"InstallDir", DirOf(opt.exePath));
 
-    if (opt.autostart) SetAutostart(true, opt.exePath);
+    ok &= SetAutostart(opt.autostart, opt.exePath);
 
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
-    return true;
+    return ok;
 }
 
 bool UnregisterShellExtension(bool machine, std::wstring& report) {
     HKEY root = machine ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
     std::vector<std::wstring> exts = GetMulti(root, kStateKey, L"Extensions");
     if (exts.empty()) exts = HandledExtensions(true);
+    std::vector<std::wstring> overridden = GetMulti(root, kStateKey, L"OverriddenProgIds");
+    bool ok = true;
 
     for (const auto& ext : exts) {
-        DeleteOurHandler(root, ext);
-        DeleteOurHandler(root, L"SystemFileAssociations\\" + ext);
+        ok &= RestoreHandler(root, ext);
+        ok &= RestoreHandler(root, L"SystemFileAssociations\\" + ext);
         RegDeleteTreeW(root, (L"Software\\Classes\\SystemFileAssociations\\" + ext + L"\\shell\\" + kVerbName).c_str());
         RegDeleteTreeW(root, (L"Software\\Classes\\SystemFileAssociations\\" + ext + L"\\shell\\" + kViewVerbName).c_str());
         DeleteValue(root, L"Software\\Classes\\" + ext + L"\\OpenWithProgids", kViewerProgId);
@@ -217,22 +260,31 @@ bool UnregisterShellExtension(bool machine, std::wstring& report) {
     }
     RegDeleteTreeW(root, (std::wstring(L"Software\\Classes\\") + kViewerProgId).c_str());
     RegDeleteTreeW(root, (std::wstring(L"Software\\Classes\\Applications\\") + kExeName).c_str());
-    for (const auto& progId : GetMulti(root, kStateKey, L"OverriddenProgIds")) {
-        std::wstring backup;
-        if (GetStr(root, kStateKey, (L"Backup." + progId).c_str(), backup))
-            SetStr(root, HandlerKey(progId), nullptr, backup);
-        else
-            DeleteOurHandler(root, progId);
+    for (const auto& progId : overridden) {
+        ok &= RestoreHandler(root, progId);
         report += L"  восстановлен обработчик ProgID " + progId + L"\r\n";
     }
 
-    RegDeleteTreeW(root, (std::wstring(L"Software\\Classes\\CLSID\\") + kClsidString).c_str());
-    DeleteValue(root, kApprovedKey, kClsidString);
-    RegDeleteTreeW(root, kStateKey);
-    SetAutostart(false, L"");
+    // A successful exit must not leave Explorer pointing at an uninstalled DLL.
+    for (const auto& path : overridden) {
+        std::wstring value;
+        if (GetStr(root, HandlerKey(path), nullptr, value) && _wcsicmp(value.c_str(), kClsidString) == 0)
+            ok = false;
+    }
+    if (ok) {
+        const auto deleted = RegDeleteTreeW(root, (std::wstring(L"Software\\Classes\\CLSID\\") + kClsidString).c_str());
+        ok &= deleted == ERROR_SUCCESS || deleted == ERROR_FILE_NOT_FOUND;
+    }
+    if (ok) {
+        DeleteValue(root, kApprovedKey, kClsidString);
+        SetAutostart(false, L"");
+        const auto stateDeleted = RegDeleteTreeW(root, kStateKey);
+        ok &= stateDeleted == ERROR_SUCCESS || stateDeleted == ERROR_FILE_NOT_FOUND;
+    }
+    if (!ok) report += L"Не удалось полностью снять регистрацию CadThumb. Проверьте права доступа к реестру.\r\n";
 
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
-    return true;
+    return ok;
 }
 
 bool IsAutostartEnabled() {

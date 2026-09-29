@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <climits>
 
 namespace ct {
 
@@ -18,6 +19,8 @@ static void RgbaToBgra(uint8_t* px, size_t count) {
 
 bool DecodeImage(const void* data, size_t size, Image& out) {
     int w = 0, h = 0, comp = 0;
+    if (size > INT_MAX || !stbi_info_from_memory(static_cast<const uint8_t*>(data), (int)size, &w, &h, &comp) ||
+        w <= 0 || h <= 0 || w > 16384 || h > 16384 || uint64_t(w) * h > 16ull * 1024 * 1024) return false;
     uint8_t* rgba = stbi_load_from_memory(static_cast<const uint8_t*>(data), (int)size, &w, &h, &comp, 4);
     if (!rgba) return false;
     if (w <= 0 || h <= 0 || w > 16384 || h > 16384) {

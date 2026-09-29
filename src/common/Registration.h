@@ -6,7 +6,7 @@ namespace ct {
 
 struct RegisterOptions {
     bool machine = false;     // HKLM (all users, needs admin) instead of HKCU
-    bool includeStl = false;  // STL is off by default: usually another handler is installed
+    bool includeStl = false;  // caller chooses whether to register STL
     bool contextMenu = true;  // "Обновить эскиз (CadThumb)" verb
     bool autostart = true;    // start the host at logon
     std::wstring dllPath;

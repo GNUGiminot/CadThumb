@@ -33,7 +33,8 @@ static bool DecodeFrom(IWICImagingFactory* factory, IWICBitmapDecoder* decoder, 
         return false;
     UINT w = 0, h = 0;
     conv->GetSize(&w, &h);
-    if (!w || !h || w > 16384 || h > 16384) return false;
+    // Embedded previews are decoded inside Explorer: cap decoded memory at 64 MiB.
+    if (!w || !h || w > 16384 || h > 16384 || uint64_t(w) * h > 16ull * 1024 * 1024) return false;
     out.resize((int)w, (int)h);
     return SUCCEEDED(conv->CopyPixels(nullptr, w * 4, (UINT)out.px.size(), out.px.data()));
 }
@@ -167,7 +168,14 @@ HBITMAP CreateThumbnailBitmap(const Image& img) {
     bi.bmiHeader.biCompression = BI_RGB;
     void* bits = nullptr;
     HBITMAP bmp = CreateDIBSection(nullptr, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-    if (bmp && bits) memcpy(bits, img.px.data(), img.px.size());
+    if (bmp && bits) {
+        auto* dst = static_cast<uint8_t*>(bits);
+        for (size_t i = 0; i < img.px.size(); i += 4) {
+            const unsigned a = img.px[i + 3];
+            for (int c = 0; c < 3; ++c) dst[i + c] = uint8_t((img.px[i + c] * a + 127) / 255);
+            dst[i + 3] = uint8_t(a);
+        }
+    }
     return bmp;
 }
 

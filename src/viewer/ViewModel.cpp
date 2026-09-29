@@ -108,6 +108,7 @@ size_t FeatureEdges(const Mesh& m, float creaseDeg, float quantum, std::vector<f
             if (std::fabs(a.x * b.x + a.y * b.y + a.z * b.z) < cosT) emit(edges[i].key);
         } else {
             emit(edges[i].key); // non-manifold
+            ++open;
         }
         i = j;
     }

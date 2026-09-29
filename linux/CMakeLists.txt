@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(cadthumb-thumbnailer VERSION 1.0.0 LANGUAGES CXX)
+project(cadthumb-thumbnailer VERSION 1.0.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -40,6 +40,9 @@ add_executable(cadthumb-thumbnailer
   src/render/StepLoader.cpp
   src/render/RenderFile.cpp
   third_party/miniz/miniz.c
+  third_party/miniz/miniz_tdef.c
+  third_party/miniz/miniz_tinfl.c
+  third_party/miniz/miniz_zip.c
 )
 
 target_include_directories(cadthumb-thumbnailer PRIVATE

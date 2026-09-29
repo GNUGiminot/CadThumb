@@ -87,19 +87,6 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    long fileSizeMB = 0;
-    if (FILE* f = fopen(input.c_str(), "rb")) {
-        fseeko(f, 0, SEEK_END);
-        fileSizeMB = (long)(ftello(f) / (1024 * 1024));
-        fclose(f);
-    }
-    if (fileSizeMB > s.maxFileSizeMB) {
-        fprintf(stderr, "cadthumb-thumbnailer: %s is %ld MB, over MaxFileSizeMB=%d\n", input.c_str(), fileSizeMB,
-                s.maxFileSizeMB);
-        g_done = true;
-        return 1;
-    }
-
     Image img;
     std::string error, details;
     bool ok = RenderFileToImage(input, type, size, s, img, error, &details);

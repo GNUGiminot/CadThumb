@@ -59,9 +59,8 @@ std::string NormalizeZipPath(const std::string& in) {
     for (size_t i = 0; i < in.size(); ++i) {
         char c = in[i];
         if (c == '%' && i + 2 < in.size() && isxdigit((unsigned char)in[i + 1]) && isxdigit((unsigned char)in[i + 2])) {
-            s.push_back((char)strtol(in.substr(i + 1, 2).c_str(), nullptr, 16));
+            c = (char)strtol(in.substr(i + 1, 2).c_str(), nullptr, 16);
             i += 2;
-            continue;
         }
         if (c == '\\') c = '/';
         s.push_back(c >= 'A' && c <= 'Z' ? char(c - 'A' + 'a') : c);
@@ -119,7 +118,7 @@ int ZipArchive::Find(const std::string& name) const {
 }
 
 bool ZipArchive::Extract(int index, std::vector<char>& out, uint64_t maxSize) const {
-    if (!impl_->open || index < 0) return false;
+    if (!impl_->open || index < 0 || index >= Count()) return false;
     uint64_t size = UncompressedSize(index);
     if (size > maxSize) return false;
     out.resize((size_t)size);

@@ -5,9 +5,9 @@
 
 ![Эскизы в Проводнике](docs/images/thumbnails.png)
 
-> **English.** CadThumb adds thumbnails for **STEP (.step/.stp)**, **3MF** and optionally **STL** files to Windows 10/11 File Explorer, plus a lightweight 3D viewer (rotate/pan/zoom, edges, dimensions, a ruler with vertex snapping, volume and PLA weight estimate). STEP files are tessellated with OpenCASCADE; 3MF uses the picture embedded by the slicer or renders the model. Rendering runs in a separate process with memory and time limits, so Explorer never hangs or crashes because of a heavy file. Download `CadThumb-Setup-x.y.z.exe` from [Releases](../../releases/latest), no admin rights needed. The documentation below is in Russian. Contact: [GitHub Issues](../../issues), Telegram [@giminot](https://t.me/giminot).
+> **English.** CadThumb adds thumbnails for **STEP (.step/.stp/.p21)**, **3MF** and **STL** files to Windows 10/11 File Explorer, plus a lightweight 3D viewer (rotate/pan/zoom, edges, dimensions, a ruler with vertex snapping, volume and PLA weight estimate). STL thumbnails can be switched off during installation. STEP files are tessellated with OpenCASCADE; 3MF uses the picture embedded by the slicer or renders the model. Rendering runs in a separate process with memory and time limits, so Explorer never hangs or crashes because of a heavy file. Download `CadThumb-Setup-x.y.z.exe` from [Releases](../../releases/latest), no admin rights needed for a per-user install. The documentation below is in Russian. Contact: [GitHub Issues](../../issues), Telegram [@giminot](https://t.me/giminot).
 
-Проводник показывает эскизы моделей `.step`, `.stp` и `.3mf` (и, по желанию, `.stl`) прямо в папках, открывать CAD или слайсер не нужно. В комплекте есть лёгкий 3D-просмотрщик с линейкой.
+Проводник показывает эскизы моделей `.step`, `.stp`, `.p21`, `.3mf` и `.stl` прямо в папках, открывать CAD или слайсер не нужно. Эскизы STL можно отключить при установке. В комплекте есть лёгкий 3D-просмотрщик с линейкой.
 
 Есть версия для Linux (GNOME Files/Nautilus, Nemo, Caja, Thunar) — см. раздел [«Linux»](#linux) ниже.
 
@@ -15,7 +15,7 @@
 
 Установщик: **[Releases → CadThumb-Setup-x.y.z.exe](../../releases/latest)** (Windows 10/11 x64).
 
-Установщик не подписан цифровой подписью, поэтому SmartScreen может предупредить о неизвестном издателе: «Подробнее» → «Выполнить в любом случае». Рядом с установщиком лежит файл `.sha256` с контрольной суммой.
+Релизный установщик публикуется только после цифровой подписи через SignPath. Локальная сборка (`build.ps1`) остаётся неподписанной. Подпись подтверждает издателя, но [SmartScreen может предупредить о новом приложении, пока не накоплена репутация](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation). Рядом с релизным установщиком лежит файл `.sha256` с контрольной суммой.
 
 ## Установка на другие компьютеры
 
@@ -24,15 +24,16 @@
 Двойной клик открывает окно с выбором:
 * **«Установить для меня»** — без прав администратора, в `%LOCALAPPDATA%\Programs\CadThumb`;
 * **«Установить для всех пользователей»** — в `Program Files`, Windows запросит права администратора;
-* флажок **«Также .stl»**.
+* флажок **«Показывать эскизы STL»**, включённый по умолчанию. Он не меняет приложение, которым открываются STL-файлы.
 
 Программа появляется в «Параметры → Приложения → Установленные приложения» и удаляется оттуда. При удалении можно отдельно удалить настройки и кэш.
 
 Тихая установка (скрипты, развёртывание на нескольких ПК):
 
 ```
-CadThumb-Setup-1.0.0.exe /S                 для текущего пользователя, STEP + 3MF
-CadThumb-Setup-1.0.0.exe /S /STL /MACHINE   для всех пользователей, плюс STL
+CadThumb-Setup-1.0.2.exe /S                 для текущего пользователя, включая STL
+CadThumb-Setup-1.0.2.exe /S /MACHINE        для всех пользователей, включая STL
+                         /NOSTL            без эскизов STL
                          /NOMENU /NOAUTOSTART   без пункта контекстного меню / без автозапуска
                          /RESTARTEXPLORER       перезапустить Проводник в конце (эскизы сразу и на рабочем столе)
 CadThumbSetup.exe /uninstall /S [/PURGE]    удаление (команда есть в записи «Установленные приложения»)
@@ -40,7 +41,7 @@ CadThumbSetup.exe /uninstall /S [/PURGE]    удаление (команда е�
 
 Уже запущенный Проводник, особенно рабочий стол, запоминает, что для `.step` обработчика эскизов нет, и до перезапуска не спрашивает CadThumb. Поэтому последнее окно установщика предлагает **«Перезапустить Проводник сейчас»**. Перезапуск идёт через Restart Manager: панель задач мигнёт, окна папок закроются. Если отказаться, на рабочем столе эскизы появятся после следующего входа в Windows. Отдельно: `CadThumb.exe --restart-explorer`.
 
-Повторный запуск установщика обновляет программу поверх: регистрация переключается на новую версию, старая удаляется, когда Проводник её отпустит. Фоновый сервис запускается через Проводник. Поэтому установщик не ждёт его завершения, в том числе при `Start-Process -Wait`, а при установке «для всех» сервис работает с обычными правами пользователя, а не администратора.
+Повторный запуск установщика находит уже установленную копию и обновляет её в той же области (для пользователя или для всех), сохраняя выбранные опции и одну запись в «Установленных приложениях». Регистрация переключается на новую версию; старые файлы удаляются, когда Проводник их отпустит. Фоновый сервис запускается через Проводник, а при установке «для всех» работает с обычными правами пользователя, а не администратора.
 
 ## Сборка из исходников
 
@@ -53,7 +54,7 @@ CadThumbSetup.exe /uninstall /S [/PURGE]    удаление (команда е�
 ```powershell
 .\build.ps1            # первый раз: vcpkg соберёт OpenCASCADE (~20 мин), дальше — секунды
 .\install.ps1          # установить из build\ (то же, что установщик, но без записи в «Установленных приложениях»)
-.\install.ps1 -Stl     # плюс STL (заменит текущий STL-обработчик, например от QIDI Studio)
+.\install.ps1 -Stl     # плюс эскизы STL (не меняет приложение, открывающее STL)
 .\uninstall.ps1        # удалить (-Purge — вместе с настройками и кэшем)
 ```
 
@@ -136,11 +137,11 @@ CadThumbSetup.exe /uninstall /S [/PURGE]    удаление (команда е�
 * Жёсткий предел — `RenderTimeoutSec` (300 с), после него процесс рендера убивается. Неудачи кэшируются на `FailRetryHours`, чтобы не жечь CPU при каждом открытии папки.
 
 **Изоляция.** Windows умеет запускать обработчики эскизов в изолированном `dllhost`, но этот суррогат видит только регистрации из HKLM. При установке для пользователя (HKCU) он возвращает `REGDB_E_CLASSNOTREG` — это проверено. Поэтому:
-* установка «для пользователя» ставит `DisableProcessIsolation=1`, как это делают обработчики Microsoft 3MF и QIDI STL, и DLL работает внутри Проводника;
+* установка «для пользователя» ставит `DisableProcessIsolation=1`, и DLL работает внутри Проводника;
 * DLL при этом минимальна: весь разбор файлов идёт в отдельном процессе. Вызов обёрнут в SEH, чтобы исключение не уронило Проводник;
 * `install.ps1 -Machine` (от администратора) регистрирует в HKLM и сохраняет изоляцию.
 
-**Обновление без перезапуска Проводника.** Загруженную DLL нельзя перезаписать. Поэтому каждая установка идёт в новую папку `app-<время>`, регистрация переключается на неё, а старые папки удаляются, когда освободятся.
+**Удаление старой версии при обновлении.** После успешной установки новой версии старые папки удаляются сразу. Если DLL занята Проводником, её удаление автоматически планируется на перезагрузку Windows (установка для всех) или следующий вход пользователя (установка для себя). При выбранном перезапуске Проводника установщик повторяет очистку сразу. Настройки и кэш сохраняются.
 
 **3MF.** Сначала используется картинка, которую сохранил слайсер: `_rels/.rels` → thumbnail, `Metadata/thumbnail.png`, `Metadata/plate_1.png` (Bambu/Orca/QIDI). Маски `pick_*` и `*_small` пропускаются. Если картинки нет, модель рендерится: `build/item`, компоненты, `p:path` на другие `.model` в пакете (Bambu), трансформации, цвета `basematerials`/`colorgroup`. Поставьте `Prefer3mfEmbedded=0`, чтобы всегда рендерить модель.
 

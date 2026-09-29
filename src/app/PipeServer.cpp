@@ -31,7 +31,7 @@ bool WriteAll(HANDLE h, const void* buf, DWORD len) {
     const char* p = static_cast<const char*>(buf);
     while (len) {
         DWORD n = 0;
-        if (!WriteFile(h, p, len, &n, nullptr)) return false;
+        if (!WriteFile(h, p, len, &n, nullptr) || n == 0) return false;
         p += n;
         len -= n;
     }
@@ -77,7 +77,8 @@ void HandleClient(HANDLE pipe) {
         const DWORD maxWait = DWORD(s.renderTimeoutSec + 30) * 1000;
 
         JobManager::JobPtr job;
-        switch (jm.Reserve(key, type, bucket, req.name, job)) {
+        const auto reservation = jm.Reserve(key, type, bucket, req.name, job);
+        switch (reservation) {
         case JobManager::ReserveResult::Cached:
             Send(pipe, RespCached);
             break;
@@ -92,6 +93,8 @@ void HandleClient(HANDLE pipe) {
         case JobManager::ReserveResult::New:
             break;
         }
+        // Only the owner of a new reservation may receive data or enqueue it.
+        if (reservation != JobManager::ReserveResult::New) break;
 
         if (req.dataSize == 0 || req.dataSize > uint64_t(s.maxFileSizeMB) * 1024 * 1024) {
             jm.Abandon(job);
@@ -138,6 +141,8 @@ void HandleClient(HANDLE pipe) {
         Send(pipe, job->state == JobManager::Job::Done ? RespDone : RespFailed);
     } while (false);
 
+    // Ensure the final response has been consumed before disconnecting; otherwise
+    // DisconnectNamedPipe discards unread data from the pipe.
     FlushFileBuffers(pipe);
     DisconnectNamedPipe(pipe);
     CloseHandle(pipe);

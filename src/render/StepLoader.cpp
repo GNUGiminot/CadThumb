@@ -155,6 +155,12 @@ bool LoadStep(const std::wstring& path, int size, double quality, Mesh& mesh, St
     try {
         Handle(TDocStd_Document) doc;
         XCAFApp_Application::GetApplication()->NewDocument("BinXCAF", doc);
+        struct DocumentGuard {
+            Handle(TDocStd_Document) doc;
+            ~DocumentGuard() {
+                try { XCAFApp_Application::GetApplication()->Close(doc); } catch (...) {}
+            }
+        } closeDocument{doc};
 
         STEPCAFControl_Reader reader;
         reader.SetColorMode(true);
@@ -230,7 +236,7 @@ bool LoadStep(const std::wstring& path, int size, double quality, Mesh& mesh, St
             if (mesh.idx.empty()) CollectEdges(shape, defl, mesh);
         }
     } catch (const Standard_Failure& e) {
-        error = std::string("STEP: OCCT exception: ") + (e.GetMessageString() ? e.GetMessageString() : "?");
+        error = std::string("STEP: OCCT exception: ") + e.what();
         return false;
     } catch (const std::bad_alloc&) {
         error = "STEP: out of memory";

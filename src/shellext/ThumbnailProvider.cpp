@@ -71,6 +71,7 @@ IFACEMETHODIMP ThumbnailProvider::GetThumbnail(UINT cx, HBITMAP* bitmap, WTS_ALP
     if (!bitmap || !alpha) return E_POINTER;
     *bitmap = nullptr;
     *alpha = WTSAT_UNKNOWN;
+    if (cx == 0 || cx > 16384) return E_INVALIDARG;
     if (!stream_) return E_UNEXPECTED;
     HRESULT hr = GuardedProduce(this, cx, bitmap, alpha);
     if (hr == E_UNEXPECTED) Log(L"structured exception caught in GetThumbnail");
@@ -144,6 +145,7 @@ HRESULT ThumbnailProvider::Produce(UINT cx, HBITMAP* bitmap, WTS_ALPHATYPE* alph
             LogVerbose(L"%s: cache hit (%llu ms)", name.c_str(), GetTickCount64() - t0);
             return Deliver(img, cx, bitmap, alpha);
         }
+        RemoveCacheEntry(key); // A corrupt PNG must not prevent regeneration forever.
         break;
     case CacheState::Failed:
         LogVerbose(L"%s: known failure, skipped", name.c_str());

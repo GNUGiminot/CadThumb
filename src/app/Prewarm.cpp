@@ -6,6 +6,7 @@
 #include "common/Paths.h"
 #include "common/ThreeMfPackage.h"
 #include "common/Zip.h"
+#include "common/ImageIO.h"
 
 #include <shlobj.h>
 #include <thumbcache.h>
@@ -59,7 +60,8 @@ void UpdateExplorerThumbnail(const std::wstring& path) {
 static bool HasEmbedded3mfThumbnail(const std::wstring& path) {
     ZipArchive zip;
     std::vector<char> bytes;
-    return zip.OpenFile(path) && Find3mfThumbnail(zip, bytes);
+    Image image;
+    return zip.OpenFile(path) && Find3mfThumbnail(zip, bytes) && DecodeImage(bytes.data(), bytes.size(), image);
 }
 
 void PrewarmFolder(const std::wstring& folder, PrewarmState& st) {

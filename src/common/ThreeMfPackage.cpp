@@ -2,50 +2,20 @@
 
 #include <algorithm>
 #include <cstring>
+#include <pugixml.hpp>
 
 namespace ct {
 
-static std::string AttrValue(const std::string& tag, const char* attr) {
-    // finds  attr="value"  or  attr='value'  (attr preceded by whitespace)
-    size_t pos = 0;
-    size_t alen = strlen(attr);
-    while ((pos = tag.find(attr, pos)) != std::string::npos) {
-        bool boundary = pos > 0 && (tag[pos - 1] == ' ' || tag[pos - 1] == '\t' || tag[pos - 1] == '\n' ||
-                                    tag[pos - 1] == '\r');
-        size_t p = pos + alen;
-        while (p < tag.size() && (tag[p] == ' ' || tag[p] == '\t')) ++p;
-        if (boundary && p < tag.size() && tag[p] == '=') {
-            ++p;
-            while (p < tag.size() && (tag[p] == ' ' || tag[p] == '\t')) ++p;
-            if (p < tag.size() && (tag[p] == '"' || tag[p] == '\'')) {
-                char q = tag[p];
-                size_t e = tag.find(q, p + 1);
-                if (e != std::string::npos) return tag.substr(p + 1, e - p - 1);
-            }
-        }
-        pos += alen;
-    }
-    return {};
-}
-
 std::vector<OpcRelationship> ParseRels(const std::vector<char>& xmlBytes) {
     std::vector<OpcRelationship> out;
-    std::string xml(xmlBytes.begin(), xmlBytes.end());
-    size_t pos = 0;
-    while ((pos = xml.find("<", pos)) != std::string::npos) {
-        size_t end = xml.find('>', pos);
-        if (end == std::string::npos) break;
-        std::string tag = xml.substr(pos, end - pos);
-        // element name may carry a namespace prefix: <Relationship ...> or <r:Relationship ...>
-        size_t nameEnd = tag.find_first_of(" \t\r\n/", 1);
-        std::string name = tag.substr(1, nameEnd == std::string::npos ? std::string::npos : nameEnd - 1);
-        size_t colon = name.find(':');
-        if (colon != std::string::npos) name = name.substr(colon + 1);
-        if (name == "Relationship") {
-            OpcRelationship r{AttrValue(tag, "Type"), AttrValue(tag, "Target")};
-            if (!r.target.empty()) out.push_back(std::move(r));
-        }
-        pos = end + 1;
+    pugi::xml_document doc;
+    if (!doc.load_buffer(xmlBytes.data(), xmlBytes.size())) return out;
+    for (auto node : doc.document_element().children()) {
+        const char* name = strrchr(node.name(), ':');
+        name = name ? name + 1 : node.name();
+        if (strcmp(name, "Relationship") || !strcmp(node.attribute("TargetMode").value(), "External")) continue;
+        OpcRelationship r{node.attribute("Type").value(), node.attribute("Target").value()};
+        if (!r.target.empty()) out.push_back(std::move(r));
     }
     return out;
 }

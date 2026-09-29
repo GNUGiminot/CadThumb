@@ -11,6 +11,7 @@
     <comment>STEP 3D model</comment>
     <glob pattern="*.step"/>
     <glob pattern="*.stp"/>
+    <glob pattern="*.p21"/>
   </mime-type>
   <mime-type type="application/vnd.ms-package.3dmanufacturing-3dmodel+xml">
     <comment>3MF 3D model</comment>

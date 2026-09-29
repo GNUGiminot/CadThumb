@@ -11,7 +11,7 @@ struct OpcRelationship {
     std::string target;
 };
 
-// Minimal attribute-level parser for OPC .rels files (no full XML parser needed).
+// Parse OPC relationships with XML entity and encoding support; ignore external targets.
 std::vector<OpcRelationship> ParseRels(const std::vector<char>& xml);
 
 // Path of the root 3D model part (default "3D/3dmodel.model").

@@ -53,7 +53,7 @@ bool IoWithTimeout(HANDLE pipe, bool write, void* buf, DWORD len, const Deadline
                 break;
             }
         }
-        if (n == 0 && !write) {
+        if (n == 0) {
             ok = false;
             break;
         }
@@ -96,7 +96,11 @@ bool IsHostRunning() {
 bool StartHost(const std::wstring& hostExe, DWORD waitMs) {
     // Serialize concurrent starts from several thumbnail threads.
     HANDLE startLock = CreateMutexW(nullptr, FALSE, (L"Local\\CadThumb.Start." + CurrentUserSid()).c_str());
-    if (startLock) WaitForSingleObject(startLock, 5000);
+    DWORD lockResult = startLock ? WaitForSingleObject(startLock, 5000) : WAIT_FAILED;
+    if (startLock && lockResult != WAIT_OBJECT_0 && lockResult != WAIT_ABANDONED) {
+        CloseHandle(startLock);
+        return false;
+    }
 
     bool ok = IsHostRunning();
     if (!ok && FileExists(hostExe)) {

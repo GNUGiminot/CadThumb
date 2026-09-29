@@ -8,4 +8,4 @@
 [Thumbnailer Entry]
 TryExec=cadthumb-thumbnailer
 Exec=cadthumb-thumbnailer %u %o %s
-MimeType=model/step;model/step-xml;application/step;model/3mf;application/vnd.ms-package.3dmanufacturing-3dmodel+xml;
+MimeType=model/step;application/step;model/3mf;application/vnd.ms-package.3dmanufacturing-3dmodel+xml;

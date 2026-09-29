@@ -6,10 +6,12 @@
 #include <cwchar>
 #include <algorithm>
 #include <mutex>
+#include <cmath>
+#include <cwctype>
 
 namespace ct {
 
-static constexpr int kRendererVersion = 4; // bump to invalidate every cached thumbnail
+static constexpr int kRendererVersion = 5; // bump to invalidate every cached thumbnail
 
 static std::wstring ReadStr(const wchar_t* sec, const wchar_t* key, const wchar_t* def, const std::wstring& ini) {
     wchar_t buf[256]{};
@@ -33,7 +35,9 @@ static double ReadDouble(const wchar_t* sec, const wchar_t* key, double def, con
     std::wstring s = ReadStr(sec, key, L"", ini);
     if (s.empty()) return def;
     for (auto& ch : s) if (ch == L',') ch = L'.';
-    return _wtof(s.c_str());
+    wchar_t* end = nullptr;
+    double value = wcstod(s.c_str(), &end);
+    return end != s.c_str() && *end == 0 && std::isfinite(value) ? value : def;
 }
 
 static uint32_t ReadColor(const wchar_t* sec, const wchar_t* key, uint32_t def, bool allowTransparent,
@@ -43,6 +47,7 @@ static uint32_t ReadColor(const wchar_t* sec, const wchar_t* key, uint32_t def, 
     if (allowTransparent && (_wcsicmp(s.c_str(), L"transparent") == 0 || s == L"none")) return 0;
     if (s[0] == L'#') s.erase(0, 1);
     if (s.size() != 6) return def;
+    if (!std::all_of(s.begin(), s.end(), [](wchar_t c) { return iswxdigit(c) != 0; })) return def;
     uint32_t v = wcstoul(s.c_str(), nullptr, 16);
     return allowTransparent ? (0xFF000000u | v) : v;
 }
@@ -56,7 +61,7 @@ static Settings LoadFromIni(const std::wstring& ini) {
     s.enableStl = ReadInt(G, L"EnableStl", 1, ini) != 0;
     s.maxFileSizeMB = std::max(1, ReadInt(G, L"MaxFileSizeMB", s.maxFileSizeMB, ini));
     s.handlerWaitSec = std::min(120, std::max(1, ReadInt(G, L"HandlerWaitSec", s.handlerWaitSec, ini)));
-    s.renderTimeoutSec = std::max(5, ReadInt(G, L"RenderTimeoutSec", s.renderTimeoutSec, ini));
+    s.renderTimeoutSec = std::clamp(ReadInt(G, L"RenderTimeoutSec", s.renderTimeoutSec, ini), 5, 86400);
     s.maxParallel = std::min(16, std::max(1, ReadInt(G, L"MaxParallelRenders", s.maxParallel, ini)));
     s.memoryLimitMB = std::max(256, ReadInt(G, L"RenderMemoryLimitMB", s.memoryLimitMB, ini));
     s.failRetryHours = std::max(0, ReadInt(G, L"FailRetryHours", s.failRetryHours, ini));

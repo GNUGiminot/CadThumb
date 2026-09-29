@@ -19,13 +19,40 @@ env:
   VCPKG_COMMIT: aa40adda5352e87655b8583cfb2451d5e9e276fd
 
 jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ pkg-config libpugixml-dev libocct-data-exchange-dev libfreeimage-dev
+      - name: Build Linux thumbnailer
+        run: cmake -S linux -B linux/build -DCMAKE_BUILD_TYPE=Release && cmake --build linux/build -j2
+      - name: Smoke test supported formats
+        run: |
+          mkdir -p linux/build/smoke
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_DEFLATED
+          base = Path('linux/build/smoke')
+          (base / 'tetra.stl').write_text('solid tetra\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 10 0 0\nvertex 0 10 0\nendloop\nendfacet\nendsolid tetra\n')
+          model = "<model unit='millimeter' xmlns='http://schemas.microsoft.com/3dmanufacturing/core/2015/02'><resources><object id='1' type='model'><mesh><vertices><vertex x='0' y='0' z='0'/><vertex x='10' y='0' z='0'/><vertex x='0' y='10' z='0'/></vertices><triangles><triangle v1='0' v2='1' v3='2'/></triangles></mesh></object></resources><build><item objectid='1'/></build></model>"
+          rels = "<Relationships xmlns='http://schemas.openxmlformats.org/package/2006/relationships'><Relationship Id='r1' Type='http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel' Target='/3D/3dmodel.model'/></Relationships>"
+          with ZipFile(base / 'tetra.3mf', 'w', ZIP_DEFLATED) as z:
+              z.writestr('_rels/.rels', rels)
+              z.writestr('3D/3dmodel.model', model)
+          PY
+          linux/build/cadthumb-thumbnailer linux/build/smoke/tetra.stl linux/build/smoke/stl.png 256
+          linux/build/cadthumb-thumbnailer linux/build/smoke/tetra.3mf linux/build/smoke/3mf.png 256
+          test -s linux/build/smoke/stl.png
+          test -s linux/build/smoke/3mf.png
   build:
     runs-on: windows-2022
     timeout-minutes: 240 # the first OpenCASCADE build takes a while; later runs use the binary cache
     env:
-      # Signing only for release tags, and only once SignPath is set up (SIGNING.md). Without it the
-      # workflow still builds and publishes, just unsigned.
-      SIGN: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.SIGNPATH_API_TOKEN != '' }}
+      # Signing only for release tags. The release guard below fails when SignPath is not configured.
+      SIGN: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' && vars.SIGNPATH_PROJECT_SLUG != '' && vars.SIGNPATH_SIGNING_POLICY_SLUG != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -63,6 +90,18 @@ jobs:
           }
           if (-not (Test-Path "dist/CadThumb-Setup-$v.exe")) { throw "dist/CadThumb-Setup-$v.exe was not produced" }
 
+      - name: Require signing for a release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          if ($env:SIGN -ne 'true') {
+            throw 'Release signing is not configured. Set the SignPath secret and variables described in SIGNING.md before publishing a version tag.'
+          }
+
+      - name: Unit and protocol tests
+        shell: pwsh
+        run: ctest --test-dir build -C Release --output-on-failure --timeout 20
+
       - name: Smoke test
         shell: pwsh
         run: |
@@ -99,7 +138,7 @@ jobs:
 
       - name: Sign program files (SignPath)
         if: env.SIGN == 'true'
-        uses: signpath/github-action-submit-signing-request@v1
+        uses: signpath/github-action-submit-signing-request@v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -144,7 +183,7 @@ jobs:
 
       - name: Sign installer (SignPath)
         if: env.SIGN == 'true'
-        uses: signpath/github-action-submit-signing-request@v1
+        uses: signpath/github-action-submit-signing-request@v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -175,7 +214,7 @@ jobs:
           $setup = "dist/CadThumb-Setup-$v.exe"
           (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower() + "  CadThumb-Setup-$v.exe" |
             Out-File "$setup.sha256" -Encoding ascii
-          if ($env:SIGN -ne 'true') { Write-Host "::notice::Installer is NOT code-signed (SignPath not configured or not a release tag)" }
+          if ($env:SIGN -ne 'true') { Write-Host "::notice::CI artifact is not code-signed; only configured release tags are signed" }
 
       - uses: actions/upload-artifact@v4
         with:

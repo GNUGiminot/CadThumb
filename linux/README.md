@@ -15,14 +15,14 @@ is copied byte-for-byte). **Settings, status and (un)install all live in one ter
 ```bash
 git clone https://github.com/GNUGiminot/CadThumb.git
 cd CadThumb/linux
-sudo apt install cmake g++ pkg-config libpugixml-dev libocct-data-exchange-dev  # Debian/Ubuntu; see below for other distros
+sudo apt install cmake g++ pkg-config libpugixml-dev libocct-data-exchange-dev libfreeimage-dev  # Debian/Ubuntu
 ./install.sh            # current user, STEP + 3MF
 ./install.sh --stl      # + .stl
 ./install.sh --system   # for all users (asks for sudo)
 ```
 
 The first run builds `cadthumb-thumbnailer` (a couple of minutes), then registers it. Open a folder
-with a `.step`/`.3mf` file in your file manager — reopen it or press F5 if it was already open, file
+with a `.step`/`.stp`/`.p21`/`.3mf` file in your file manager — reopen it or press F5 if it was already open, file
 managers only pick up a new thumbnailer on the next folder read.
 
 Other distros: Fedora — `sudo dnf install cmake gcc-c++ pkgconfig pugixml-devel opencascade-devel`;
@@ -54,12 +54,10 @@ view angles, colors, background, `MaxFileSizeMB`, `Prefer3mfEmbedded`, ...) — 
 
 ## Status
 
-Verified: builds against OpenCASCADE 7.6 (Ubuntu 24.04's `libocct-*-dev`) and pugixml; the `cadthumb`
-install/uninstall/status/settings/test flow was exercised end-to-end with a stand-in binary. **Not
-yet verified**: an actual rendered thumbnail has not yet been visually confirmed inside a real file
-manager window (no GUI desktop was available while writing this). See `tools/STATUS.md` for a
-build-environment quirk hit while cross-checking the real binary link step (specific to a rootless
-verification sandbox, not expected on a normal `sudo apt install`) and exact next steps.
+The GitHub Actions workflow is configured to build the Linux thumbnailer on Ubuntu 24.04 and render
+generated 3MF and STL fixtures. A live file-manager window and Linux STEP rendering still need a
+desktop integration check.
+See `tools/STATUS.md` for the earlier rootless build investigation.
 
 ## Building manually
 

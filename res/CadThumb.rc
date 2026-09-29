@@ -3,8 +3,8 @@
 1 ICON "CadThumb.ico"
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,0,0,0
- PRODUCTVERSION 1,0,0,0
+ FILEVERSION 1,0,3,0
+ PRODUCTVERSION 1,0,3,0
  FILEFLAGSMASK 0x3fL
  FILEOS VOS_NT_WINDOWS32
  FILETYPE VFT_APP
@@ -14,9 +14,9 @@ BEGIN
         BLOCK "041904b0"
         BEGIN
             VALUE "FileDescription", "CadThumb - STEP/3MF/STL thumbnails for Windows Explorer"
-            VALUE "FileVersion", "1.0.0"
+            VALUE "FileVersion", "1.0.3"
             VALUE "ProductName", "CadThumb"
-            VALUE "ProductVersion", "1.0.0"
+            VALUE "ProductVersion", "1.0.3"
             VALUE "OriginalFilename", "CadThumb.exe"
         END
     END

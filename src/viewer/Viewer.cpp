@@ -160,14 +160,16 @@ int NextPow2(int v) {
     return p;
 }
 
-void MakeText(TextTex& t, const std::wstring& text, HFONT font) {
+void MakeText(TextTex& t, const std::wstring& text, HFONT font, int maxWidth = 4096) {
     if (t.tex) glDeleteTextures(1, &t.tex);
     t = TextTex{};
     if (text.empty()) return;
     HDC mdc = CreateCompatibleDC(nullptr);
     HGDIOBJ oldFont = SelectObject(mdc, font);
-    RECT rc{0, 0, 4096, 0};
-    DrawTextW(mdc, text.c_str(), -1, &rc, DT_CALCRECT | DT_NOPREFIX | DT_LEFT);
+    maxWidth = std::clamp(maxWidth, 32, 4096);
+    const UINT layout = DT_NOPREFIX | DT_LEFT | DT_WORDBREAK;
+    RECT rc{0, 0, maxWidth, 0};
+    DrawTextW(mdc, text.c_str(), -1, &rc, DT_CALCRECT | layout);
     t.w = rc.right + 4;
     t.h = rc.bottom + 4;
     BITMAPINFO bi{};
@@ -183,7 +185,7 @@ void MakeText(TextTex& t, const std::wstring& text, HFONT font) {
     SetTextColor(mdc, RGB(255, 255, 255));
     SetBkMode(mdc, TRANSPARENT);
     RECT r{2, 2, t.w, t.h};
-    DrawTextW(mdc, text.c_str(), -1, &r, DT_NOPREFIX | DT_LEFT);
+    DrawTextW(mdc, text.c_str(), -1, &r, layout);
     GdiFlush();
 
     t.tw = NextPow2(t.w);
@@ -335,18 +337,22 @@ void UpdateTexts() {
     } else {
         bigText = L"Перетащите сюда файл STEP, 3MF или STL\nили нажмите Ctrl+O";
     }
-    MakeText(V.info, infoText, V.font);
-    MakeText(V.big, bigText, V.fontBig);
+    const int pad = MulDiv(12, V.dpi, 96);
+    MakeText(V.info, infoText, V.font, V.w - 2 * pad);
+    MakeText(V.big, bigText, V.fontBig, V.w - 2 * pad);
+    const bool compact = V.w < MulDiv(700, V.dpi, 96) || V.h < MulDiv(500, V.dpi, 96);
     MakeText(V.help,
-             V.showHelp ? L"ЛКМ — вращать   ПКМ / СКМ / Shift+ЛКМ — сдвиг   колесо — масштаб   двойной щелчок, F — "
+             V.showHelp ? (compact ? L"ЛКМ — вращать   ПКМ — сдвиг   колесо — масштаб   F — показать всё\n"
+                                      L"R — линейка   Ctrl+O — файл   H — подсказка"
+                                    : L"ЛКМ — вращать   ПКМ / СКМ / Shift+ЛКМ — сдвиг   колесо — масштаб   двойной щелчок, F — "
                           L"показать всё\n"
                           L"Виды: 1 спереди  2 сзади  3 слева  4 справа  5 сверху  6 снизу  0 изометрия\n"
                           L"R — линейка (Backspace — убрать последний замер, Esc — очистить)   "
                           L"Ctrl+C — картинка в буфер обмена\n"
                           L"E — рёбра   O — перспектива   B — фон   Enter — открыть в своей программе   "
-                          L"Ctrl+O — другой файл   H — скрыть подсказку"
+                          L"Ctrl+O — другой файл   H — скрыть подсказку")
                         : L"H — подсказка",
-             V.fontSmall);
+             V.fontSmall, V.w - MulDiv(88, V.dpi, 96) - pad);
 }
 
 // ------------------------------------------------------------------ loading
@@ -919,7 +925,7 @@ void CreateFonts() {
 void OpenDialog() {
     IFileOpenDialog* dlg = nullptr;
     if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return;
-    const COMDLG_FILTERSPEC filters[] = {{L"3D-модели (STEP, 3MF, STL)", L"*.step;*.stp;*.3mf;*.stl"},
+    const COMDLG_FILTERSPEC filters[] = {{L"3D-модели (STEP, 3MF, STL)", L"*.step;*.stp;*.p21;*.3mf;*.stl"},
                                          {L"Все файлы", L"*.*"}};
     dlg->SetFileTypes(ARRAYSIZE(filters), filters);
     dlg->SetTitle(L"Открыть 3D-модель");
@@ -1001,6 +1007,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_SIZE:
         V.w = std::max(1, (int)LOWORD(lp));
         V.h = std::max(1, (int)HIWORD(lp));
+        V.textDirty = true;
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     case WM_DPICHANGED: {
@@ -1127,6 +1134,10 @@ int RunViewer(HINSTANCE inst, const std::wstring& path, const std::wstring& snap
     const RECT& wa = mi.rcWork;
     int ww = snapshot.empty() ? (wa.right - wa.left) * 7 / 10 : 1000;
     int wh = snapshot.empty() ? (wa.bottom - wa.top) * 7 / 10 : 700;
+    if (!snapshot.empty()) {
+        if (const wchar_t* testWidth = _wgetenv(L"CADTHUMB_TEST_WIDTH")) ww = std::clamp(_wtoi(testWidth), 320, 3840);
+        if (const wchar_t* testHeight = _wgetenv(L"CADTHUMB_TEST_HEIGHT")) wh = std::clamp(_wtoi(testHeight), 240, 2160);
+    }
     V.hwnd = CreateWindowExW(WS_EX_ACCEPTFILES, kWindowClass, L"CadThumb", WS_OVERLAPPEDWINDOW,
                              wa.left + ((wa.right - wa.left) - ww) / 2, wa.top + ((wa.bottom - wa.top) - wh) / 2, ww,
                              wh, nullptr, nullptr, inst, nullptr);

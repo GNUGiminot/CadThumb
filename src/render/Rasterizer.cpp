@@ -35,7 +35,7 @@ inline uint32_t PackNormal(V3 n) {
     return kNormalValid | q(n.x) | (q(n.y) << 8) | (q(n.z) << 16);
 }
 inline V3 UnpackNormal(uint32_t p) {
-    return {((p & 0xFF) - 128) / 127.0f, (((p >> 8) & 0xFF) - 128) / 127.0f, (((p >> 16) & 0xFF) - 128) / 127.0f};
+    return {(int(p & 0xFF) - 128) / 127.0f, (int((p >> 8) & 0xFF) - 128) / 127.0f, (int((p >> 16) & 0xFF) - 128) / 127.0f};
 }
 
 inline uint32_t Scale(uint32_t rgb, float k) {
